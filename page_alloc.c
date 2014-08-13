@@ -8,6 +8,13 @@
 #include "rbtree.h"
 #include "lj_mm.h"
 
+typedef int page_id_t;
+typedef int page_idx_t;
+
+/* Forward Decl */
+static int add_block(page_id_t block, int order);
+static int log2_int32(unsigned num);
+
 /**************************************************************************
  *
  *              Depicting page
@@ -18,11 +25,6 @@ typedef struct {
     short order; /* the order in the buddy allocation */
     short flags;
 } lm_page_t;
-
-/* A block is a consecutive trunk of memory containing power-of-two pages. A block
- * is identified by the id of its first page.
- */
-typedef int blk_id_t;
 
 typedef enum {
     PF_LEADER    = (1 << 0), /* set if it's the first page of a block */
@@ -62,12 +64,6 @@ reset_allocated_blk(lm_page_t* p) {
     p->flags &= ~PF_ALLOCATED;
 }
 
-static inline int
-verify_order(blk_id_t blk_id, int order) {
-    return (blk_id & ((1<<order) - 1)) == 0;
-}
-
-
 /**************************************************************************
  *
  *              Buddy allocation stuff.
@@ -76,7 +72,6 @@ verify_order(blk_id_t blk_id, int order) {
  */
 
 /* Forward Decl */
-static int add_block(blk_id_t block, int order);
 
 /* We could have up to 1M pages (4G/4k). Hence 20 */
 #define MAX_ORDER 20
@@ -92,10 +87,28 @@ typedef struct {
     int page_num;       /* This many pages in total */
     int page_size;      /* The size of page in byte, normally 4k*/
     int page_size_log2; /* log2(page_size)*/
+    int idx_2_id_adj;
 } lm_alloc_t;
 
 static lm_alloc_t* alloc_info;
-static int log2_int32(unsigned num);
+
+static inline page_id_t
+page_idx_to_id(page_idx_t idx) {
+    ASSERT(idx >= 0 && idx < alloc_info->page_num);
+    return idx + alloc_info->idx_2_id_adj;
+}
+
+static inline page_idx_t
+page_id_to_idx(page_id_t id) {
+    int idx = id - alloc_info->idx_2_id_adj;
+    ASSERT(idx >= 0 && idx < alloc_info->page_num);
+    return idx;
+}
+
+static inline int
+verify_order(page_idx_t blk_leader, int order) {
+    return 0 == (page_idx_to_id(blk_leader) & ((1<<order) - 1));
+}
 
 /* Initialize the page allocator, return 0 on success, 1 otherwise. */
 int
@@ -143,29 +156,45 @@ lm_init_page_alloc(lm_trunk_t* trunk) {
         rbt_init(&free_blks[i]);
     rbt_init(&alloc_info->alloc_blks);
 
-    /* to make subsequent add_block() happy */
-    alloc_info->max_order = MAX_ORDER;
-
-    unsigned int bitmask = 0x80000000;
-    int max_order = 0, order = 31;
-    int page_id = 0;
-
-    while (bitmask) {
-        if (page_num & bitmask) {
-            add_block(page_id, order);
-            page_id += (1 << order);
-
-            if (max_order == 0)
-                max_order = order;
-        }
-        bitmask = bitmask >> 1;
-        order --;
+    /* Determine the max order */
+    int max_order = 0;
+    unsigned int bitmask;
+    for (bitmask = 0x80000000, max_order = 31;
+         bitmask;
+         bitmask >>= 1, max_order --) {
+        if (bitmask & page_num)
+            break;
     }
     alloc_info->max_order = max_order;
+
+    /* So, the ID of biggest block's first page is "2 * (1<<order)". e.g.
+     * Suppose the chunk contains 11 pages, which will be divided into 3
+     * blocks, eaching containing 1, 2 and 8 pages. The indices of these
+     * blocks are 0, 1, 3 respectively, and their IDs are 5, 6, and 8
+     * respectively. In this case:
+     *    alloc_info->idx_2_id_adj == 5 == page_id(*) - page_idx(*)
+     */
+    int idx_2_id_adj = (1 << max_order) - (page_num & ((1 << max_order) - 1));
+    alloc_info->idx_2_id_adj = idx_2_id_adj;
+
+    /* Divide the chunk into blocks, smaller block first. Smaller blocks
+     * are likely allocated and deallocated frequently. Therefore, they are
+     * better off residing closer to data segment.
+     */
+    int page_idx = 0;
+    int order = 0;
+    for (bitmask = 1, order = 0;
+         bitmask != 0;
+         bitmask = bitmask << 1, order++) {
+        if (page_num & bitmask) {
+            add_block(page_idx, order);
+            page_idx += (1 << order);
+        }
+    }
+
     return 1;
 }
 
-// Return ceil(log2(num))
 static int
 ceil_log2_int32 (unsigned num) {
     int res = 31 - __builtin_clz(num);
@@ -180,10 +209,11 @@ log2_int32(unsigned num) {
 
 /* Add the free block of the given "order" to the buddy system */
 static inline int
-add_block(blk_id_t block, int order) {
+add_block(page_idx_t block, int order) {
     lm_page_t* page = alloc_info->page_info + block;
 
-    ASSERT(order >= 0 && order <= alloc_info->max_order);
+    ASSERT(order >= 0 && order <= alloc_info->max_order &&
+           verify_order(block, order));
 
     page->order = order;
     set_page_leader(page);
@@ -193,7 +223,7 @@ add_block(blk_id_t block, int order) {
 }
 
 static int
-find_block(blk_id_t block, int order, intptr_t* value) {
+find_block(page_idx_t block, int order, intptr_t* value) {
     ASSERT(order >= 0 && order <= alloc_info->max_order &&
            verify_order(block, order));
 
@@ -201,7 +231,7 @@ find_block(blk_id_t block, int order, intptr_t* value) {
 }
 
 static inline int
-remove_block(blk_id_t block, int order) {
+remove_block(page_idx_t block, int order) {
     lm_page_t* page = alloc_info->page_info + block;
 
     ASSERT(page->order == order && find_block(block, order, NULL));
@@ -226,10 +256,9 @@ lm_fini_page_alloc(void) {
     }
 }
 
-
 static int
-free_block(int page_id) {
-    int del_res = rbt_delete(&alloc_info->alloc_blks, page_id);
+free_block(page_idx_t page_idx) {
+    int del_res = rbt_delete(&alloc_info->alloc_blks, page_idx);
 #ifdef DEBUG
     ASSERT(del_res);
 #else
@@ -237,31 +266,37 @@ free_block(int page_id) {
 #endif
 
     lm_page_t* pi = alloc_info->page_info;
-    lm_page_t* page = pi + page_id;
+    lm_page_t* page = pi + page_idx;
     int order = page->order;
-    ASSERT (find_block(page_id, order, NULL) == 0);
+    ASSERT (find_block(page_idx, order, NULL) == 0);
 
     char* block_addr = alloc_info->first_page +
-                       (page_id << alloc_info->page_size_log2);
+                       (page_idx << alloc_info->page_size_log2);
     size_t block_len = (1<<order) << alloc_info->page_size_log2;
     madvise(block_addr, block_len, MADV_DONTNEED);
 
     /* Consolidate adjacent buddies */
     int page_num = alloc_info->page_num;
+    page_id_t page_id = page_idx_to_id(page_idx);
+    int min_page_id = alloc_info->idx_2_id_adj;
     while (1) {
-        int buddy_id = page_id ^ (1<<order);
-        if (buddy_id >= page_num ||
-            pi[buddy_id].order != order ||
-            !is_page_leader(pi + buddy_id) ||
-            is_allocated_blk(pi + buddy_id)) {
+        page_id_t buddy_id = page_id ^ (1<<order);
+        if (buddy_id < min_page_id)
+            break;
+
+        page_idx_t buddy_idx = page_id_to_idx(buddy_id);
+        if (buddy_idx >= page_num ||
+            pi[buddy_idx].order != order ||
+            !is_page_leader(pi + buddy_idx) ||
+            is_allocated_blk(pi + buddy_idx)) {
             break;
         }
-        remove_block(buddy_id, order);
+        remove_block(buddy_idx, order);
         page_id = page_id < buddy_id ? page_id : buddy_id;
         order++;
     }
 
-    add_block(page_id, order);
+    add_block(page_id_to_idx(page_id), order);
     return 1;
 }
 
@@ -447,7 +482,7 @@ lm_malloc(size_t sz) {
     rb_tree_t* free_blks = alloc_info->free_blks;
 
     int i, blk_order = -1;
-    blk_id_t blk_id = -1;
+    page_idx_t blk_idx = -1;
 
     /* Find the smallest available block big enough to accommodate the
      * allocation request.
@@ -455,17 +490,17 @@ lm_malloc(size_t sz) {
     for (i = req_order; i < max_order; i++) {
         rb_tree_t* rbt = free_blks + i;
         if (!rbt_is_empty(rbt)) {
-            blk_id = rbt_get_min(rbt);
+            blk_idx = rbt_get_min(rbt);
             blk_order = i;
             break;
         }
     }
 
-    if (blk_id == -1)
+    if (blk_idx == -1)
         return NULL;
 
-    remove_block(blk_id, blk_order);
-    alloc_info->page_info[blk_id].order = req_order;
+    remove_block(blk_idx, blk_order);
+    alloc_info->page_info[blk_idx].order = req_order;
 
     /* The free block may be too big. If this is the case, keep splitting
      * the block until it tightly fit the allocation request.
@@ -473,18 +508,18 @@ lm_malloc(size_t sz) {
     int bo = blk_order;
     while (bo > req_order) {
         bo --;
-        int split_block = blk_id + (1 << bo);
+        int split_block = blk_idx + (1 << bo);
         add_block(split_block, bo);
     }
 
-    int insert_res = rbt_insert(&alloc_info->alloc_blks, blk_id, (intptr_t)sz);
+    int insert_res = rbt_insert(&alloc_info->alloc_blks, blk_idx, (intptr_t)sz);
     rbt_verify(&alloc_info->alloc_blks);
 #ifdef DEBUG
     ASSERT(insert_res);
 #else
     (void)insert_res;
 #endif
-    return alloc_info->first_page + (blk_id << alloc_info->page_size_log2);
+    return alloc_info->first_page + (blk_idx << alloc_info->page_size_log2);
 }
 
 /**************************************************************************
@@ -503,7 +538,8 @@ dump_page_alloc(FILE* f) {
     }
 
     /* dump the buddy system */
-    fprintf (f, "Buddy system: max-order=%d\n", alloc_info->max_order);
+    fprintf (f, "Buddy system: max-order=%d, id - idx = %d\n",
+             alloc_info->max_order, alloc_info->idx_2_id_adj);
 
     int i, e;
     char* page_start_addr = alloc_info->first_page;
@@ -522,9 +558,11 @@ dump_page_alloc(FILE* f) {
              iter != iter_e;
              iter = rbt_iter_inc(free_blks, iter)) {
             rb_node_t* node = rbt_iter_deref(iter);
-            int page_id = node->key;
-            char* addr = page_start_addr + (page_id << page_sz_log);
-            fprintf(f, "%d (%p, len=%d), ", page_id, addr, (int)node->value);
+            page_idx_t page_idx = node->key;
+            char* addr = page_start_addr + (page_idx << page_sz_log);
+            fprintf(f, "%d (%p, len=%d), ", page_idx_to_id(page_idx),
+                    addr, (int)node->value);
+            verify_order(page_idx, i);
         }
         fputs("\n", f);
     }
