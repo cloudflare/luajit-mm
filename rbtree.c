@@ -278,15 +278,64 @@ bst_insert(rb_tree_t* t, int key, intptr_t value) {
  *
  ****************************************************************************
  */
-int
+RBS_RESULT
 rbt_search(rb_tree_t* rbt, int key, intptr_t* value) {
+    if (unlikely(rbt_is_empty(rbt)))
+        return RBS_FAIL;
+
     int nd_idx = bst_search(rbt, key);
     if (nd_idx != INVALID_IDX) {
         if (value)
             *value = rbt->tree[nd_idx].value;
-        return 1;
+        return RBS_EXACT;
     }
-    return 0;
+    return RBS_FAIL;
+}
+
+RBS_RESULT
+rbt_search_variant(rb_tree_t* rbt, int key, intptr_t* value, int le) {
+    if (unlikely(rbt_is_empty(rbt)))
+        return RBS_FAIL;
+
+    rb_node_t* nd_vect = rbt->tree;
+    rb_node_t* sentinel = rbt->tree;
+
+    rb_node_t* cur = nd_vect + rbt->root;
+
+    rb_node_t* last_left, *last_right;
+    last_left = last_right = NULL;
+
+    while (cur != sentinel) {
+        if (less_than(cur, key)) {
+            last_left = cur;
+            cur = nd_vect + cur->left;
+        } else if (greater_than(cur, key)) {
+            last_right = cur;
+            cur = nd_vect + cur->right;
+        } else {
+            int idx = cur - nd_vect;
+            if (value)
+                *value = rbt->tree[idx].value;
+            return RBS_EXACT; 
+        }
+    }
+
+    if (le) {
+        if (last_right) {
+            if (value)
+                *value = last_right->value;
+            return RBS_LESS;
+        }
+        return RBS_FAIL;
+    }
+
+    if (last_left) {
+        if (value)
+            *value = last_left->value;
+        return RBS_GREATER;
+    }
+
+    return INVALID_IDX;
 }
 
 int

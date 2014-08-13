@@ -40,9 +40,22 @@ void rbt_fini(rb_tree_t*);
 /* RB-tree operations */
 int rbt_insert(rb_tree_t*, int key, intptr_t val);
 int rbt_delete(rb_tree_t*, int key);
-int rbt_search(rb_tree_t*, int key, intptr_t* val);
 int rbt_get_min(rb_tree_t*);
 int rbt_get_max(rb_tree_t*);
+
+typedef enum {
+    RBS_FAIL = 0,
+    RBS_EXACT = 1,
+    RBS_LESS = 2,
+    RBS_GREATER = 3,
+} RBS_RESULT;
+/* Return the element matching the given key. */
+RBS_RESULT rbt_search(rb_tree_t*, int key, intptr_t* val);
+
+/* Return the maximum value which is no greater than the given key*/
+RBS_RESULT rbt_search_variant(rb_tree_t*, int key, intptr_t* val, int le);
+#define rbt_search_le(t, k, v) rbt_search_variant((t), (k), (v), 1)
+#define rbt_search_ge(t, k, v) rbt_search_variant((t), (k), (v), 0)
 
 #define rbt_is_empty(rbt) ((rbt)->node_num == 1 ? 1 : 0)
 
