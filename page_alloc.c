@@ -300,6 +300,17 @@ free_block(page_idx_t page_idx) {
     return 1;
 }
 
+static void
+migrade_alloc_block(page_idx_t block, int ord_was, int ord_is, size_t new_map_sz) {
+    rb_tree_t* rbt = &alloc_info->alloc_blks;
+    int res = rbt_delete(rbt, block);
+    ASSERT(res != 0);
+
+    rbt_insert(rbt, block, new_map_sz);
+
+    ASSERT(alloc_info->page_info[block].order == ord_was);
+    alloc_info->page_info[block].order = ord_is;
+}
 
 /**************************************************************************
  *
@@ -376,29 +387,149 @@ lm_mmap(void *addr, size_t length, int prot, int flags,
     return p ? p : MAP_FAILED;
 }
 
+typedef struct {
+    int order;          /* The order of the mapped block */
+    int m_page_idx;     /* The index of the 1st page of the mapped block*/
+    int m_end_idx;
+    int um_page_idx;
+    int um_end_idx;
+    size_t m_size;      /* The mmap size in byte.*/
+} unmap_info_t;
+
 static int
-lm_unmap_helper(void* addr, size_t length) {
-    long ofst = ((char*)addr) - ((char*)alloc_info->first_page);
-    if (unlikely (ofst < 0))
+unmap_lower_part(const unmap_info_t* ui) {
+    int order       = ui->order;
+    int m_page_idx  = ui->m_page_idx;
+    int um_page_idx = ui->um_page_idx;
+
+    int new_ord = order - 1;
+    int new_page_idx = m_page_idx;
+    int split = 0;
+
+    /* Step 1: Try to deallocate leading free blocks */
+    while(1) {
+        if (new_page_idx + (1 << new_ord) > um_page_idx)
+            break;
+
+        split = 1;
+
+        /* De-allocate the first half */
+        add_block(new_page_idx, new_ord - 1);
+        new_ord--;
+        new_page_idx += (1 << new_ord);
+    }
+
+    if (!split)
         return 0;
+
+    /* Step 2: Try the shrink the trailing block */
+
+    /* As many as "alloc_page_num" pages are allocate to accommodate the data.
+     * The data is stored in the leading "data_page_num" pages.
+     */
+    int alloc_page_num = (1 << order) - (new_page_idx - m_page_idx);
+    int data_page_num = ui->m_end_idx - new_page_idx + 1;
+
+    while (alloc_page_num >= 2 * data_page_num) {
+        new_ord --;
+        add_block(new_page_idx + (1 << new_ord), new_ord);
+        alloc_page_num >>= 1;
+    }
+
+    size_t new_map_sz = ui->m_size;
+    new_map_sz -= ((new_page_idx - m_page_idx) >> alloc_info->page_size_log2);
+
+    migrade_alloc_block(m_page_idx, order, new_ord, new_map_sz);
+    return 1;
+}
+
+static int
+unmap_higher_part(const unmap_info_t* ui) {
+    int order       = ui->order;
+    int m_page_idx  = ui->m_page_idx;
+    int um_page_idx = ui->um_page_idx;
+
+    int split = 0;
+    int new_ord = order;
+    while (m_page_idx + (1 << (new_ord - 1)) >= um_page_idx) {
+        new_ord--;
+        add_block(m_page_idx + (1 << new_ord), new_ord);
+        split = 1;
+    }
+
+    if (split) {
+        int new_sz;
+        new_sz = (um_page_idx - m_page_idx + 1) << alloc_info->page_size_log2;
+        migrade_alloc_block(m_page_idx, order, new_ord, new_sz);
+    }
+
+    return split;
+}
+
+/* Helper function of lm_munmap() */
+static int
+lm_unmap_helper(void* addr, size_t um_size) {
+    /* Step 1: preliminary check if the parameters make sense */
+    long ofst = ((char*)addr) - ((char*)alloc_info->first_page);
+    if (unlikely (ofst < 0)) {
+        return 0;
+    }
 
     long page_sz = alloc_info->page_size;
-    if (unlikely ((ofst & (page_sz - 1))))
-        return 0;
+    /* This was previously checked by lm_munmap() */
+    ASSERT((ofst & (page_sz - 1)) == 0);
 
-    long page_id = ofst >> log2_int32(page_sz);
-    intptr_t map_size;
-    if (rbt_search(&alloc_info->alloc_blks, page_id, &map_size) == 0)
-        return 0;
+    /* The index of the first page of the area to be unmapped. */
+    long um_page_idx = ofst >> log2_int32(page_sz);
 
+    /* step 2: Find the previously mmapped blk which cover the unmapped area.*/
+    intptr_t m_size;
+    int m_page_idx;
+    RBS_RESULT sr = rbt_search_le(&alloc_info->alloc_blks, um_page_idx,
+                                  &m_page_idx, &m_size);
+    if (unlikely(sr == RBS_FAIL)) {
+        return 0;
+    }
+
+    /* Check if previously mapped block completely cover the to-be-unmapped
+     * area.
+     */
     int page_sz_log2 = alloc_info->page_size_log2;
-    int map_pages = ((uintptr_t)(page_sz - 1 + map_size)) >> page_sz_log2;
-    int rel_pages = ((uintptr_t)(page_sz - 1 + length)) >> page_sz_log2;
-
-    if (map_pages != rel_pages)
+    intptr_t m_end = (((intptr_t)m_page_idx) << page_sz_log2) + m_size;
+    intptr_t um_end = (((intptr_t)um_page_idx) << page_sz_log2) + um_size;
+    if (um_end > m_end) {
         return 0;
+    }
 
-    return free_block(page_id);
+    int m_end_idx = ((m_end + page_sz - 1) >> page_sz_log2) - 1;
+    int um_end_idx = ((um_end + page_sz - 1) >> page_sz_log2) - 1;
+
+    /* step 3: try to split the mapped area */
+
+    /* The most common case, unmap the entire mapped block */
+    if (m_page_idx == um_page_idx) {
+        if (m_end_idx == um_end_idx)
+            return free_block(m_page_idx);
+    }
+
+    unmap_info_t ui;
+    ui.order = alloc_info->page_info[m_page_idx].order;
+    ui.m_page_idx = m_page_idx;
+    ui.m_end_idx = m_end_idx;
+    ui.um_page_idx = m_page_idx;
+    ui.um_end_idx = m_end_idx;
+    ui.m_size = m_size;
+
+    /* case 1: unmap lower portion */
+    if (m_page_idx == um_page_idx)
+        return unmap_lower_part(&ui);
+
+    /* case 2: unmap higher portion */
+    if (m_end_idx == um_end_idx)
+        return unmap_higher_part(&ui);
+
+    /* TODO: case 3: unmap the middle portion. Bit tricky */
+    return 0;
 }
 
 int
@@ -409,11 +540,14 @@ lm_munmap(void* addr, size_t length) {
 
     ENTER_MUTEX;
     {
+        /* The <addr> must be aligned at page boundary */
         if (!length || (((uintptr_t)addr) & (page_sz - 1))) {
             errno = EINVAL;
             retval = -1;
         } else {
             retval = lm_unmap_helper(addr, length);
+            if (!retval)
+                errno = EINVAL;
             /* negate the sense of succ. */
             retval = retval ? 0 : -1;
         }

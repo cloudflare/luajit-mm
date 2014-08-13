@@ -53,9 +53,10 @@ typedef enum {
 RBS_RESULT rbt_search(rb_tree_t*, int key, intptr_t* val);
 
 /* Return the maximum value which is no greater than the given key*/
-RBS_RESULT rbt_search_variant(rb_tree_t*, int key, intptr_t* val, int le);
-#define rbt_search_le(t, k, v) rbt_search_variant((t), (k), (v), 1)
-#define rbt_search_ge(t, k, v) rbt_search_variant((t), (k), (v), 0)
+RBS_RESULT rbt_search_variant(rb_tree_t*, int key,
+                              int* res_key, intptr_t* res_val, int le);
+#define rbt_search_le(t, k, k2, v) rbt_search_variant((t), (k), (k2), (v), 1)
+#define rbt_search_ge(t, k, k2, v) rbt_search_variant((t), (k), (k2), (v), 0)
 
 #define rbt_is_empty(rbt) ((rbt)->node_num == 1 ? 1 : 0)
 
