@@ -1,7 +1,11 @@
+#ifndef _GNU_SOURCE
+    #define _GNU_SOURCE
+#endif
+#include <sys/mman.h>
 #include <stdint.h> /* for intptr_t */
 #include <unistd.h>
 #include <errno.h>
-#include <sys/mman.h>
+#include <string.h> /* for memcpy() */
 #include "lm_util.h"
 #include "lm_internal.h"
 #include "lj_mm.h"
@@ -376,7 +380,11 @@ lm_mmap(void *addr, size_t length, int prot, int flags,
 
     ENTER_MUTEX;
     {
-        if (addr || fd != -1 || !(flags & MAP_32BIT) || !length) {
+        if (addr /* we completely ignore hint */ ||
+            fd != -1 /* Only support anonymous mapp */ ||
+            !(flags & MAP_32BIT) /* Otherwise, directly use mmap(2) */ ||
+            !length ||
+            (flags & MAP_FIXED) /* not suppoted*/) {
             errno = EINVAL;
         } else {
             p = lm_malloc(length);
@@ -557,13 +565,81 @@ lm_munmap(void* addr, size_t length) {
     return retval;
 }
 
+static void*
+lm_mremap_helper(void* old_addr, size_t old_size, size_t new_size, int flags) {
+    long ofst = ((char*)old_addr) - ((char*)alloc_info->first_page);
+    long page_sz = alloc_info->page_size;
+
+    if (unlikely ((ofst & (page_sz - 1)))) {
+        errno = EINVAL;
+        return NULL;
+    }
+
+    /* We are not supporting MREMAP_FIXED */
+    if (unlikely(flags & ~MREMAP_MAYMOVE)) {
+        errno = EINVAL;
+        return NULL;
+    }
+
+    int page_sz_log2 = alloc_info->page_size_log2;
+    int page_idx = ofst >> page_sz_log2;
+    intptr_t new_size2;
+    rb_tree_t* rbt = &alloc_info->alloc_blks;
+    if (!rbt_search(rbt, page_idx, &new_size2) || new_size2 != new_size) {
+        errno = EINVAL;
+        return NULL;
+    }
+
+    int old_page_num = (old_size + page_sz - 1) >> page_sz_log2;
+    int new_page_num = (new_size + page_sz - 1) >> page_sz_log2;
+
+    if (old_page_num > new_page_num) {
+        char* unmap_start = (char*)alloc_info->first_page +
+                            (new_page_num << page_sz_log2);
+        size_t unmap_len = old_size - (((size_t)new_page_num) << page_sz_log2);
+        if (lm_unmap_helper(unmap_start, unmap_len)) {
+            rbt_set_value(rbt, page_idx, new_size);
+            return old_addr;
+        }
+        errno = EINVAL;
+        return NULL;
+    }
+
+    if (old_page_num < new_page_num) {
+        int order = alloc_info->page_info[page_idx].order;
+        if (new_page_num < (1<<order)) {
+            rbt_set_value(rbt, page_idx, new_size);
+            return old_addr;
+        }
+
+        if (flags & MREMAP_MAYMOVE) {
+            char* p = lm_malloc(new_size);
+            if (!p) {
+                errno = ENOMEM;
+                return NULL;
+            }
+            memcpy(p, old_addr, old_size);
+            lm_free(old_addr);
+            return p;
+        }
+
+        errno = EINVAL;
+        return NULL;
+    }
+
+    ASSERT(old_page_num == new_page_num);
+    rbt_set_value(&alloc_info->alloc_blks, page_idx, new_size);
+    return old_addr;
+}
+
 void*
 lm_mremap(void* old_addr, size_t old_size, size_t new_size, int flags) {
-    (void)old_addr;
-    (void)old_size;
-    (void)new_size;
-    (void)flags;
-    return MAP_FAILED;
+    void* res = NULL;
+    ENTER_MUTEX;
+    res = lm_mremap_helper(old_addr, old_size, new_size, flags);
+    LEAVE_MUTEX;
+
+    return res ? res : MAP_FAILED;
 }
 
 int

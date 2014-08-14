@@ -368,6 +368,19 @@ rbt_get_min(rb_tree_t* rbt) {
 }
 
 int
+rbt_set_value(rb_tree_t* rbt, int key, intptr_t value) {
+    if (unlikely(rbt_is_empty(rbt)))
+        return 0;
+
+    int nd_idx = bst_search(rbt, key);
+    if (nd_idx != INVALID_IDX) {
+        rbt->tree[nd_idx].value = value;
+        return 1;
+    }
+    return 0;
+}
+
+int
 rbt_insert(rb_tree_t* rbt, int key, intptr_t value) {
     /* step 1: insert the key/val pair into the binary-search-tree */
     int nd_idx = bst_insert(rbt, key, value);

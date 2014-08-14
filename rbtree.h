@@ -58,6 +58,8 @@ RBS_RESULT rbt_search_variant(rb_tree_t*, int key,
 #define rbt_search_le(t, k, k2, v) rbt_search_variant((t), (k), (k2), (v), 1)
 #define rbt_search_ge(t, k, k2, v) rbt_search_variant((t), (k), (k2), (v), 0)
 
+int rbt_set_value(rb_tree_t*, int key, intptr_t value);
+
 #define rbt_is_empty(rbt) ((rbt)->node_num == 1 ? 1 : 0)
 
 /* RB-tree iterator */
