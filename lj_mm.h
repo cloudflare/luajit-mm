@@ -2,6 +2,7 @@
 #define _LJ_MM_H_
 
 #include <stdlib.h> /* for size_t */
+#include <stdio.h>  /* for FILE* */
 
 #ifdef __cplusplus
 extern "C" {

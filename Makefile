@@ -19,7 +19,7 @@ BUILD_SO_DIR = obj/so
 
 RB_TREE_SRCS = rbtree.c
 RB_TEST_SRCS = rb_test.cxx
-ALLOC_SRCS = trunk.c page_alloc.c
+ALLOC_SRCS = trunk.c page_alloc.c mem_map.c
 DEMO_SRCS = demo.c
 
 C_SRCS = $(RB_TREE_SRCS) $(ALLOC_SRCS)

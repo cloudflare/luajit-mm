@@ -2,8 +2,8 @@
 #include <stdlib.h>
 #include <malloc.h>
 #include <strings.h> /* for bzero() */
-#include "lm_util.h"
-#include "lm_internal.h"
+#include "util.h"
+#include "trunk.h"
 #include "lj_mm.h"
 
 #define LM_ADDR_UPBOUND   ((uint)0x80000000)

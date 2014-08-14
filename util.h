@@ -1,6 +1,10 @@
 #ifndef _LM_UTIL_H_
 #define _LM_UTIL_H_
 
+#ifdef DEBUG
+    #include <stdlib.h> /* for abort() */
+#endif
+
 #ifdef THREAD_SAFE
     void entery_mutex();
     void leave_mutex();
@@ -13,6 +17,17 @@
 
 typedef unsigned int uint;
 
+static inline int
+ceil_log2_int32 (unsigned num) {
+    int res = 31 - __builtin_clz(num);
+    res += (num & (num - 1)) ? 1 : 0;
+    return res;
+}
+
+static inline int
+log2_int32(unsigned num) {
+    return 31 - __builtin_clz(num);
+}
 
 #ifdef DEBUG
     // Usage examples: ASSERT(a > b),  ASSERT(foo() && "Opps, foo() reutrn 0");
