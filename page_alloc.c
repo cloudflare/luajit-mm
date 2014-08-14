@@ -99,7 +99,6 @@ lm_init_page_alloc(lm_trunk_t* trunk) {
     return 1;
 }
 
-
 void
 lm_fini_page_alloc(void) {
     if (alloc_info) {
@@ -165,6 +164,85 @@ free_block(page_idx_t page_idx) {
  *
  **************************************************************************
  */
+lm_status_t*
+lm_alloc_stat(void) {
+    if (!alloc_info)
+        return NULL;
+
+    lm_status_t* s = (lm_status_t *)malloc(sizeof(lm_status_t));
+    s->first_page = alloc_info->first_page;
+    s->page_num = alloc_info->page_num;
+    s->idx_to_id = alloc_info->idx_2_id_adj;
+    s->free_blk_info = NULL;
+    s->alloc_blk_info = NULL;
+    rb_tree_t* rbt = &alloc_info->alloc_blks;
+    int alloc_blk_num = rbt_size(rbt);
+
+    /* Populate allocated block info */
+    if (alloc_blk_num) {
+        block_info_t* ai;
+        ai = (block_info_t*)malloc(sizeof(block_info_t) * alloc_blk_num);
+        s->alloc_blk_info = ai;
+
+        rb_iter_t iter, iter_e;
+        int idx = 0;
+        for (iter = rbt_iter_begin(rbt), iter_e = rbt_iter_end(rbt);
+             iter != iter_e;
+             iter = rbt_iter_inc(rbt, iter)) {
+            rb_node_t* blk = rbt_iter_deref(iter);
+            ai[idx].page_idx = blk->key;
+            ai[idx].size = blk->value;
+            ai[idx].order = alloc_info->page_info[blk->key].order;
+            idx++;
+        }
+    }
+
+    /* Populate free block info */
+    int free_blk_num = 0;
+    int i, e;
+    for (i = 0, e = alloc_info->max_order; i < e; i++) {
+        free_blk_num += rbt_size(alloc_info->free_blks + i);
+    }
+    if (free_blk_num) {
+        block_info_t* fi;
+        fi = (block_info_t*)malloc(sizeof(block_info_t) * free_blk_num);
+        s->free_blk_info = fi;
+
+        int idx = 0;
+
+        for (i = 0, e = alloc_info->max_order; i < e; i++) {
+            rb_tree_t* rbt = alloc_info->free_blks + i;
+
+            rb_iter_t iter, iter_e;
+            for (iter = rbt_iter_begin(rbt), iter_e = rbt_iter_end(rbt);
+                 iter != iter_e;
+                 iter = rbt_iter_inc(rbt, iter)) {
+                rb_node_t* nd = rbt_iter_deref(iter);
+                fi[idx].page_idx = nd->key;
+                fi[idx].order = alloc_info->page_info[nd->key].order;
+                fi[idx].size = 1 << fi[idx].order;
+            }
+        }
+        ASSERT(idx == free_blk_num);
+    }
+
+    return s;
+}
+
+void
+lm_free_alloc_stat(lm_status_t* status) {
+    if (!status)
+        return;
+
+    if (status->free_blk_info)
+        free(status->free_blk_info);
+
+    if (status->alloc_blk_info)
+        free(status->alloc_blk_info);
+
+    free(status);
+}
+
 #ifdef DEBUG
 void
 dump_page_alloc(FILE* f) {

@@ -62,6 +62,8 @@ int rbt_set_value(rb_tree_t*, int key, intptr_t value);
 
 #define rbt_is_empty(rbt) ((rbt)->node_num == 1 ? 1 : 0)
 
+#define rbt_size(rbt)     ((rbt)->node_num - 1)
+
 /* RB-tree iterator */
 typedef rb_node_t* rb_iter_t;
 #define rbt_iter_begin(rbt)         ((rbt)->tree + 1)
