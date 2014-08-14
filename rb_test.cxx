@@ -359,11 +359,12 @@ unit_test() {
     //
     /////////////////////////////////////////////////////////////////////////
     //
+    fprintf(stdout, "\n>Testing search operation...\n");
 
-    // test 100
+    // test 1
     {
         int val[] = { 1, 2, 3, 5, 7, 8 };
-        RB_UNIT_TEST ut(100);
+        RB_UNIT_TEST ut(1);
         ut.BulkInsert(val, ARRAY_SIZE(val));
         ut.SearchLessEqu(4, 3, RBS_LESS);
         ut.SearchLessEqu(3, 3, RBS_EXACT);
