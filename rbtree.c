@@ -337,7 +337,7 @@ rbt_search_variant(rb_tree_t* rbt, int key, int* res_key, intptr_t* res_value,
 
     if (res != RBS_FAIL) {
         if (res_key)
-            *res_key = res_elemt - nd_vect;
+            *res_key = res_elemt->key;
 
         if (res_value)
             *res_value = res_elemt->value;
