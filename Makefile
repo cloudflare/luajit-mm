@@ -4,6 +4,7 @@ AR_NAME := libljmm.a
 SO_NAME := libljmm.so
 RBTREE_TEST := rbt_test  # test program for red-black tree
 DEMO_NAME := demo        # A demo illustrating how to use the lib being built.
+UNIT_TEST := unit_test
 
 OPT_FLAGS = -O0 -g -DDEBUG
 CFLAGS = -fvisibility=hidden -MMD -Wall $(OPT_FLAGS)
@@ -21,6 +22,7 @@ RB_TREE_SRCS = rbtree.c
 RB_TEST_SRCS = rb_test.cxx
 ALLOC_SRCS = trunk.c page_alloc.c mem_map.c
 DEMO_SRCS = demo.c
+UNIT_TEST_SRCS = unit_test.cxx
 
 C_SRCS = $(RB_TREE_SRCS) $(ALLOC_SRCS)
 C_OBJS = ${C_SRCS:%.c=%.o}
@@ -30,9 +32,9 @@ SO_OBJ = $(addprefix obj/so/, $(C_OBJS))
 
 .PHONY = all clean test
 
-all: $(AR_NAME) $(SO_NAME) $(RBTREE_TEST) $(DEMO_NAME)
+all: $(AR_NAME) $(SO_NAME) $(RBTREE_TEST) $(DEMO_NAME) $(UNIT_TEST)
 
-$(RBTREE_TEST) $(DEMO_NAME) : $(AR_NAME) $(SO_NAME)
+$(RBTREE_TEST) $(DEMO_NAME) $(UNIT_TEST): $(AR_NAME) $(SO_NAME)
 
 -include ar_dep.txt
 -include so_dep.txt
@@ -69,6 +71,9 @@ $(SO_OBJ) : $(BUILD_SO_DIR)/%.o : %.c
 $(DEMO_NAME) : ${DEMO_SRCS:%.c=%.o} $(AR_NAME)
 	$(CC) $(filter %.o, $+) -L. -Wl,-static -lljmm -Wl,-Bdynamic -o $@
 
+$(UNIT_TEST) : ${UNIT_TEST_SRCS:%.cxx=%.o} $(AR_NAME)
+	$(CXX) $(filter %.o, $+) -L. -Wl,-static -lljmm -Wl,-Bdynamic -o $@
+
 $(RBTREE_TEST) : ${RB_TREE_SRCS:%.c=%.o} ${RB_TEST_SRCS:%.cxx=%.o}
 	$(CXX) $(filter %.o, $+) -o $@
 
@@ -77,6 +82,10 @@ $(RBTREE_TEST) : ${RB_TREE_SRCS:%.c=%.o} ${RB_TEST_SRCS:%.cxx=%.o}
 
 %.o : %.cxx
 	$(CXX) $(CXXFLAGS) -c $<
+
+test : $(RBTREE_TEST) $(UNIT_TEST)
+	./$(RBTREE_TEST)
+	./$(UNIT_TEST)
 
 clean:
 	rm -f *.o *.d ar_dep.txt so_dep.txt $(BUILD_AR_DIR)/* $(BUILD_SO_DIR)/*

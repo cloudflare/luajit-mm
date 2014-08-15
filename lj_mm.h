@@ -59,8 +59,8 @@ typedef struct {
     block_info_t* alloc_blk_info;
 } lm_status_t;
 
-lm_status_t* lm_alloc_stat(void);
-void lm_free_alloc_stat(lm_status_t*);
+const lm_status_t* lm_get_status(void);
+void lm_free_status(lm_status_t*);
 
 #ifdef DEBUG
 void dump_page_alloc(FILE*) LJMM_EXPORT;

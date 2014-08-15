@@ -4,6 +4,7 @@
 #include "rbtree.h"
 #include "util.h"
 #include "trunk.h" /* for lm_trunk_t */
+#include "lj_mm.h"
 
 /**************************************************************************
  *
@@ -149,7 +150,7 @@ migrade_alloc_block(page_idx_t block, int ord_was, int ord_is, size_t new_map_sz
 int free_block(page_idx_t page_idx);
 
 /* Init & Fini */
-int lm_init_page_alloc(lm_trunk_t* trunk);
+int lm_init_page_alloc(lm_trunk_t* trunk, lj_mm_opt_t* mm_opt);
 void lm_fini_page_alloc(void);
 
 /* Misc */

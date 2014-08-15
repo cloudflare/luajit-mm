@@ -16,7 +16,7 @@ lm_alloc_t* alloc_info = NULL;
 
 /* Initialize the page allocator, return 0 on success, 1 otherwise. */
 int
-lm_init_page_alloc(lm_trunk_t* trunk) {
+lm_init_page_alloc(lm_trunk_t* trunk, lj_mm_opt_t* mm_opt) {
     if (!trunk) {
         /* Trunk is not yet allocated */
         return 0;
@@ -28,6 +28,12 @@ lm_init_page_alloc(lm_trunk_t* trunk) {
     }
 
     int page_num = trunk->page_num;
+    if (unlikely(mm_opt != NULL)) {
+        int pn = mm_opt->page_num;
+        if (((pn > 0) && (pn > page_num)) || !pn)
+            return 0;
+    }
+
     int alloc_sz = sizeof(lm_alloc_t) +
                    sizeof(lm_page_t) * (page_num + 1);
 
@@ -164,8 +170,8 @@ free_block(page_idx_t page_idx) {
  *
  **************************************************************************
  */
-lm_status_t*
-lm_alloc_stat(void) {
+const lm_status_t*
+lm_get_status(void) {
     if (!alloc_info)
         return NULL;
 
@@ -230,7 +236,7 @@ lm_alloc_stat(void) {
 }
 
 void
-lm_free_alloc_stat(lm_status_t* status) {
+lm_free_status(lm_status_t* status) {
     if (!status)
         return;
 

@@ -25,8 +25,6 @@ void lm_free_trunk(void);
 void lm_dump_trunk(FILE* f);
 #endif
 
-int lm_init_page_alloc(lm_trunk_t*);
-void lm_fini_page_alloc(void);
 #ifdef DEBUG
 void dump_page_alloc(FILE* f);
 #endif
