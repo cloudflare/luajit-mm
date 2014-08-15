@@ -84,7 +84,10 @@ $(RBTREE_TEST) : ${RB_TREE_SRCS:%.c=%.o} ${RB_TEST_SRCS:%.cxx=%.o}
 	$(CXX) $(CXXFLAGS) -c $<
 
 test : $(RBTREE_TEST) $(UNIT_TEST)
+	@echo "RB-tree unit testing"
 	./$(RBTREE_TEST)
+	@echo ""
+	@echo "Memory management unit testing"
 	./$(UNIT_TEST)
 
 clean:

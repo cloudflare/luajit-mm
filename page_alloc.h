@@ -138,12 +138,8 @@ add_block(page_idx_t block, int order) {
 static inline void
 migrade_alloc_block(page_idx_t block, int ord_was, int ord_is, size_t new_map_sz) {
     rb_tree_t* rbt = &alloc_info->alloc_blks;
-    int res = rbt_delete(rbt, block);
-    ASSERT(res != 0);
-
-    rbt_insert(rbt, block, new_map_sz);
-
-    ASSERT(alloc_info->page_info[block].order == ord_was);
+    int res = rbt_set_value(rbt, block, new_map_sz);
+    ASSERT(res != 0 && alloc_info->page_info[block].order == ord_was);
     alloc_info->page_info[block].order = ord_is;
 }
 
