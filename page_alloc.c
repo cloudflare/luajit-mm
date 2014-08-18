@@ -10,8 +10,6 @@
 #include "page_alloc.h"
 
 /* Forward Decl */
-static int add_block(page_id_t block, int order);
-
 lm_alloc_t* alloc_info = NULL;
 
 /* Initialize the page allocator, return 0 on success, 1 otherwise. */
@@ -98,7 +96,7 @@ lm_init_page_alloc(lm_trunk_t* trunk, lj_mm_opt_t* mm_opt) {
          bitmask != 0;
          bitmask = bitmask << 1, order++) {
         if (page_num & bitmask) {
-            add_block(page_idx, order);
+            add_free_block(page_idx, order);
             page_idx += (1 << order);
         }
     }
@@ -123,12 +121,7 @@ lm_fini_page_alloc(void) {
 
 int
 free_block(page_idx_t page_idx) {
-    int del_res = rbt_delete(&alloc_info->alloc_blks, page_idx);
-#ifdef DEBUG
-    ASSERT(del_res);
-#else
-    (void)del_res;
-#endif
+    (void)remove_alloc_block(page_idx);
 
     lm_page_t* pi = alloc_info->page_info;
     lm_page_t* page = pi + page_idx;
@@ -156,12 +149,14 @@ free_block(page_idx_t page_idx) {
             is_allocated_blk(pi + buddy_idx)) {
             break;
         }
-        remove_block(buddy_idx, order);
+        remove_free_block(buddy_idx, order);
+        reset_page_leader(alloc_info->page_info + buddy_idx);
+
         page_id = page_id < buddy_id ? page_id : buddy_id;
         order++;
     }
 
-    add_block(page_id_to_idx(page_id), order);
+    add_free_block(page_id_to_idx(page_id), order);
     return 1;
 }
 

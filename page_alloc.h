@@ -110,7 +110,7 @@ find_block(page_idx_t block, int order, intptr_t* value) {
 }
 
 static inline int
-remove_block(page_idx_t block, int order) {
+remove_free_block(page_idx_t block, int order) {
     lm_page_t* page = alloc_info->page_info + block;
 
     ASSERT(page->order == order && find_block(block, order, NULL));
@@ -122,7 +122,7 @@ remove_block(page_idx_t block, int order) {
 
 /* Add the free block of the given "order" to the buddy system */
 static inline int
-add_block(page_idx_t block, int order) {
+add_free_block(page_idx_t block, int order) {
     lm_page_t* page = alloc_info->page_info + block;
 
     ASSERT(order >= 0 && order <= alloc_info->max_order &&
@@ -133,6 +133,27 @@ add_block(page_idx_t block, int order) {
     reset_allocated_blk(page);
 
     return rbt_insert(&alloc_info->free_blks[order], block, 0);
+}
+
+static inline int
+add_alloc_block(page_idx_t block, intptr_t sz, int order) {
+    int res = rbt_insert(&alloc_info->alloc_blks, block, (intptr_t)sz);
+    ASSERT(res);
+
+    lm_page_t* pg = alloc_info->page_info + block;
+    pg->order = order;
+    set_page_leader(pg);
+    set_allocated_blk(pg);
+
+    return res;
+}
+
+static inline int
+remove_alloc_block(page_idx_t block) {
+    ASSERT(is_page_leader(alloc_info->page_info + block));
+    int res = rbt_delete(&alloc_info->alloc_blks, block);
+    ASSERT(res);
+    return res;
 }
 
 static inline void
