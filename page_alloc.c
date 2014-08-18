@@ -204,7 +204,7 @@ lm_get_status(void) {
     /* Populate free block info */
     int free_blk_num = 0;
     int i, e;
-    for (i = 0, e = alloc_info->max_order; i < e; i++) {
+    for (i = 0, e = alloc_info->max_order; i <= e; i++) {
         free_blk_num += rbt_size(alloc_info->free_blks + i);
     }
     if (free_blk_num) {
@@ -213,7 +213,7 @@ lm_get_status(void) {
 
         int idx = 0;
         int page_size_log2 = alloc_info->page_size_log2;
-        for (i = 0, e = alloc_info->max_order; i < e; i++) {
+        for (i = 0, e = alloc_info->max_order; i <= e; i++) {
             rb_tree_t* rbt = alloc_info->free_blks + i;
 
             rb_iter_t iter, iter_e;
@@ -282,11 +282,25 @@ dump_page_alloc(FILE* f) {
             rb_node_t* node = rbt_iter_deref(iter);
             page_idx_t page_idx = node->key;
             char* addr = page_start_addr + (page_idx << page_sz_log);
-            fprintf(f, "%d (%p, len=%d), ", page_idx_to_id(page_idx),
+            fprintf(f, "pg_idx:%d (%p, len=%d), ", page_idx,
                     addr, (int)node->value);
             verify_order(page_idx, i);
         }
         fputs("\n", f);
+    }
+
+    fprintf(f, "\nAllocated blocks:\n");
+    {
+        rb_tree_t* rbt = &alloc_info->alloc_blks;
+        rb_iter_t iter, iter_e;
+        int idx = 0;
+        for (iter = rbt_iter_begin(rbt), iter_e = rbt_iter_end(rbt);
+             iter != iter_e;
+             iter = rbt_iter_inc(rbt, iter)) {
+            rb_node_t* nd = rbt_iter_deref(iter);
+            fprintf(f, "%3d: pg_idx:%d, size:%ld\n", idx, nd->key, nd->value);
+            idx++;
+        }
     }
 }
 #endif

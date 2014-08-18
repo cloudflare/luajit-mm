@@ -215,6 +215,34 @@ UNIT_TEST::VerifyStatus(blk_info2_t* alloc_blk_v, int alloc_blk_v_len,
 
 int
 main(int argc, char** argv) {
+    fprintf(stdout, ">>Mmap unit testing\n");
+    // test1
+    //
+    {
+        //allocate trunk containing 2+4+8 pages.
+        UNIT_TEST ut(1, 2+4+8);
+
+        // allocate 103 bytes
+        ut.Mmap(0, 103);
+
+        // allocate 1 page + 101 byte
+        ut.Mmap(1, 101);
+
+        // allocate 104 bytes
+        ut.Mmap(0, 104);
+
+        blk_info2_t free_blk[] = { {6, 3, 8, 0} /* 8-page block */,
+                                   {4, 1, 2, 0} /* splitted from 4-page blk*/,
+                                 };
+
+        blk_info2_t alloc_blk[] = { {2, 1, 1, 101},
+                                    {0, 0, 0, 103},
+                                    {1, 0, 0, 104}};
+
+        ut.VerifyStatus(alloc_blk, ARRAY_SIZE(alloc_blk),
+                        free_blk, ARRAY_SIZE(free_blk));
+    }
+
     fprintf(stdout, ">>Unmap unit testing\n");
 
     // Notation for address.
