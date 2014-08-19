@@ -342,5 +342,23 @@ main(int argc, char** argv) {
                         free_blk, ARRAY_SIZE(free_blk));
     }
 
+    // Test2:
+    {
+        // similar to the test1, except that it's not able to expand the
+        // allocated by merge free buddy blocks. It needs to allocate a new
+        // blocks, and copy the original content to the new one.
+        //
+        UNIT_TEST ut(2, 16);
+        ut.Mmap(MemExt(ut, 1, 123)); // allocate one-page + 123-byte.
+        ut.Mmap(MemExt(ut, 2, 456)); // allocate two-page + 456-byte.
+
+        // expand to 6-page + 234 bytes.
+        ut.Mremap(MemExt(ut, 1, 123, 0), MemExt(ut, 6, 234));
+
+        blk_info2_t alloc_blk[] = { {8, 3, 6, 234}, {4, 2, 2, 456} };
+        blk_info2_t free_blk[] = { {0, 2, 4, 0} };
+        ut.VerifyStatus(alloc_blk, ARRAY_SIZE(alloc_blk),
+                        free_blk, ARRAY_SIZE(free_blk));
+    }
     return fail_num == 0 ? 0 : -1;
 }
