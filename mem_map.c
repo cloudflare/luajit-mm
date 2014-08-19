@@ -118,9 +118,9 @@ lm_mremap_helper(void* old_addr, size_t old_size, size_t new_size, int flags) {
 
     int page_sz_log2 = alloc_info->page_size_log2;
     int page_idx = ofst >> page_sz_log2;
-    intptr_t new_size2;
+    intptr_t size_verify;
     rb_tree_t* rbt = &alloc_info->alloc_blks;
-    if (!rbt_search(rbt, page_idx, &new_size2) || new_size2 != new_size) {
+    if (!rbt_search(rbt, page_idx, &size_verify) || size_verify != old_size) {
         errno = EINVAL;
         return NULL;
     }
@@ -128,6 +128,7 @@ lm_mremap_helper(void* old_addr, size_t old_size, size_t new_size, int flags) {
     int old_page_num = (old_size + page_sz - 1) >> page_sz_log2;
     int new_page_num = (new_size + page_sz - 1) >> page_sz_log2;
 
+    /* Shrink the existing allocated block */
     if (old_page_num > new_page_num) {
         char* unmap_start = (char*)alloc_info->first_page +
                             (new_page_num << page_sz_log2);
@@ -140,12 +141,18 @@ lm_mremap_helper(void* old_addr, size_t old_size, size_t new_size, int flags) {
         return NULL;
     }
 
+    /* Expand the existing allocated block */
     if (old_page_num < new_page_num) {
         int order = alloc_info->page_info[page_idx].order;
+        /* Block is big enough to accommodate the old-size byte.*/
         if (new_page_num < (1<<order)) {
             rbt_set_value(rbt, page_idx, new_size);
             return old_addr;
         }
+
+        /* Try to merge with the buddy block */
+        if (extend_alloc_block(page_idx, new_size))
+            return old_addr;
 
         if (flags & MREMAP_MAYMOVE) {
             char* p = lm_malloc(new_size);
@@ -164,6 +171,7 @@ lm_mremap_helper(void* old_addr, size_t old_size, size_t new_size, int flags) {
 
     ASSERT(old_page_num == new_page_num);
     rbt_set_value(&alloc_info->alloc_blks, page_idx, new_size);
+
     return old_addr;
 }
 

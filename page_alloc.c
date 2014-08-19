@@ -119,6 +119,63 @@ lm_fini_page_alloc(void) {
     }
 }
 
+/* The extend given the exiting allocated block such that it could accommodate
+ * at least new_sz bytes.
+ */
+int
+extend_alloc_block(page_idx_t block_idx, size_t new_sz) {
+    rb_tree_t* rbt = &alloc_info->alloc_blks;
+    intptr_t alloc_sz;
+    int res = rbt_search(rbt, block_idx, &alloc_sz);
+    ASSERT(res);
+
+    int page_sz = alloc_info->page_size;
+    int page_sz_log2 = alloc_info->page_size_log2;
+    int min_page_num = (new_sz + page_sz - 1) >> page_sz_log2;
+
+    page_id_t blk_id = page_idx_to_id(block_idx);
+    int order = alloc_info->page_info[block_idx].order;
+
+    /* step 1: perfrom try run to see if we have luck. */
+    int succ = 0;
+    int ord;
+    for (ord = order; ord <= alloc_info->max_order; ord++) {
+        if (min_page_num <= (1 << ord)) {
+            succ = 1;
+            break;
+        }
+
+        page_id_t buddy_id = blk_id ^ (1 << ord);
+        if (buddy_id < blk_id) {
+            /* The buddy block must reside at higher address. */
+            break;
+        }
+
+        int buddy_idx = page_id_to_idx(buddy_id);
+        if (!rbt_search(&alloc_info->free_blks[ord], buddy_idx, NULL))
+            break;
+    }
+
+    /* This function is not supposed to shrink the existing block; therefore,
+     * if the existing block is big enough to accommodate allocation request,
+     * it need to return 0 to inform the caller something fishy is happening.
+     */
+    if (!succ || ord == order)
+        return 0;
+
+    int t;
+    for (t = order; t < ord; t++) {
+        page_id_t buddy_id = blk_id ^ (1 << t);
+        int buddy_idx = page_id_to_idx(buddy_id);
+        remove_free_block(buddy_idx, t);
+        reset_page_leader(alloc_info->page_info + buddy_idx);
+    }
+
+    migrade_alloc_block(block_idx, order, ord, new_sz);
+
+    return 1;
+}
+
 int
 free_block(page_idx_t page_idx) {
     (void)remove_alloc_block(page_idx);
@@ -175,6 +232,8 @@ lm_get_status(void) {
     s->first_page = alloc_info->first_page;
     s->page_num = alloc_info->page_num;
     s->idx_to_id = alloc_info->idx_2_id_adj;
+    s->alloc_blk_num = 0;
+    s->free_blk_num = 0;
     s->free_blk_info = NULL;
     s->alloc_blk_info = NULL;
     rb_tree_t* rbt = &alloc_info->alloc_blks;
@@ -298,7 +357,9 @@ dump_page_alloc(FILE* f) {
              iter != iter_e;
              iter = rbt_iter_inc(rbt, iter)) {
             rb_node_t* nd = rbt_iter_deref(iter);
-            fprintf(f, "%3d: pg_idx:%d, size:%ld\n", idx, nd->key, nd->value);
+            int blk = nd->key;
+            fprintf(f, "%3d: pg_idx:%d, size:%ld, order = %d\n",
+                    idx, blk, nd->value, alloc_info->page_info[blk].order);
             idx++;
         }
     }

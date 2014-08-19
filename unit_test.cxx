@@ -23,6 +23,25 @@ typedef struct {
     int fraction;
 } blk_info2_t;
 
+class UNIT_TEST;
+class MemExt {
+public:
+    MemExt(UNIT_TEST& ut, int page_num, int fraction,
+            int first_page = -1) :
+           _ut(ut), _page_num(page_num), _fraction(fraction),
+           _first_page(first_page) {}
+
+    inline size_t getLen() const;
+    inline char* getStartAddr() const;
+    char* getEndAddr() const { return getStartAddr() + getLen(); }
+
+private:
+    UNIT_TEST& _ut;
+    int _page_num;
+    int _fraction;
+    int _first_page;
+};
+
 class UNIT_TEST {
 public:
     UNIT_TEST(int test_id, int page_num);
@@ -32,13 +51,18 @@ public:
                       blk_info2_t* free_blk_v, int free_blk_v_len);
 
     int getPageSize() const { return _page_size; }
+    char* getChunkBase() const { return _trunk_base; }
+    char* getPageAddr(int page_idx) const {
+        return _trunk_base + page_idx * getPageSize();
+    }
 
     // Allocate "full_page_num * page-size + fraction" bytes.
-    bool Alloc(int page_num, int fraction);
-    bool Mmap(int page_num, int page_fraction);
+    bool Alloc(const MemExt&);
+    bool Mmap(const MemExt&);
 
-    // Unmap [first-page : first + page_num * page-size + fraction].
-    bool Unmap(int first_page, int page_num, int fraction=0);
+    // Munmap [first-page : first + page_num * page-size + fraction].
+    bool Munmap(const MemExt&);
+    bool Mremap(const MemExt& old, const MemExt& new_ext);
 
 private:
     void Transfer_Block_Info(vector<block_info_t>& to,
@@ -54,6 +78,16 @@ private:
     bool _test_succ;
     char* _trunk_base;
 };
+
+inline size_t
+MemExt::getLen() const {
+    return _ut.getPageSize() * (size_t)_page_num + _fraction;
+}
+
+inline char*
+MemExt::getStartAddr() const {
+    return _ut.getChunkBase() + _ut.getPageSize() * _first_page;
+}
 
 UNIT_TEST::UNIT_TEST(int test_id, int page_num)
     : _test_id(test_id) {
@@ -108,11 +142,11 @@ UNIT_TEST::Compare_Blk_Info_Vect(const vector<block_info_t>& v1,
 }
 
 bool
-UNIT_TEST::Alloc(int page_num, int page_fraction) {
+UNIT_TEST::Alloc(const MemExt& mem_ext) {
     if (!_init_succ || !_test_succ)
         return false;
 
-    void* p = lm_malloc(page_num * getPageSize() + page_fraction);
+    void* p = lm_malloc(mem_ext.getLen());
     if (!p) {
         _test_succ = false;
         return false;
@@ -124,11 +158,11 @@ UNIT_TEST::Alloc(int page_num, int page_fraction) {
 // allocate "page_num * page_size + page_fraction" bytes.
 //
 bool
-UNIT_TEST::Mmap(int page_num, int page_fraction) {
+UNIT_TEST::Mmap(const MemExt& mem_ext) {
     if (!_init_succ || !_test_succ)
         return false;
 
-    void* p = lm_mmap(NULL, page_num * _page_size + page_fraction,
+    void* p = lm_mmap(NULL, mem_ext.getLen(),
                       PROT_READ|PROT_WRITE,
                       MAP_32BIT|MAP_PRIVATE|MAP_ANONYMOUS,
                       -1, 0);
@@ -136,17 +170,25 @@ UNIT_TEST::Mmap(int page_num, int page_fraction) {
     return _test_succ;
 }
 
-// Unmap [first-page : first + page_num * page-size + fraction]
 bool
-UNIT_TEST::Unmap(int first_page, int page_num, int fraction) {
-
+UNIT_TEST::Munmap(const MemExt& mem_ext) {
     if (!_init_succ || !_test_succ)
         return false;
 
-    char* start_addr = _trunk_base + first_page * _page_size;
-    int len = page_num * _page_size  + fraction;
-    _test_succ = (lm_munmap(start_addr, len) == 0);
+    _test_succ = (lm_munmap(mem_ext.getStartAddr(), mem_ext.getLen()) == 0);
+    return _test_succ;
+}
 
+bool
+UNIT_TEST::Mremap(const MemExt& old, const MemExt& new_one) {
+    if (!_init_succ || !_test_succ)
+        return false;
+
+    void* r;
+    r = lm_mremap(old.getStartAddr(), old.getLen(), new_one.getLen(),
+                  MREMAP_MAYMOVE);
+
+    _test_succ = (r != MAP_FAILED);
     return _test_succ;
 }
 
@@ -215,7 +257,7 @@ UNIT_TEST::VerifyStatus(blk_info2_t* alloc_blk_v, int alloc_blk_v_len,
 
 int
 main(int argc, char** argv) {
-    fprintf(stdout, ">>Mmap unit testing\n");
+    fprintf(stdout, "\n>>Mmap unit testing\n");
     // test1
     //
     {
@@ -223,13 +265,13 @@ main(int argc, char** argv) {
         UNIT_TEST ut(1, 2+4+8);
 
         // allocate 103 bytes
-        ut.Mmap(0, 103);
+        ut.Mmap(MemExt(ut, 0, 103));
 
         // allocate 1 page + 101 byte
-        ut.Mmap(1, 101);
+        ut.Mmap(MemExt(ut, 1, 101));
 
         // allocate 104 bytes
-        ut.Mmap(0, 104);
+        ut.Mmap(MemExt(ut, 0, 104));
 
         blk_info2_t free_blk[] = { {6, 3, 8, 0} /* 8-page block */,
                                    {4, 1, 2, 0} /* splitted from 4-page blk*/,
@@ -243,7 +285,7 @@ main(int argc, char** argv) {
                         free_blk, ARRAY_SIZE(free_blk));
     }
 
-    fprintf(stdout, ">>Unmap unit testing\n");
+    fprintf(stdout, "\n>>Munmap unit testing\n");
 
     // Notation for address.
     //    page-n: if it show up in the beginning position, it means,
@@ -257,8 +299,8 @@ main(int argc, char** argv) {
     // Test1: unmapping the trailing port of mapped area
     {
         UNIT_TEST ut(1, 8);
-        ut.Mmap(5, 123);     // map [page0 - page5:123]
-        ut.Unmap(3, 2, 120); // unmap [page3 - page5:120]
+        ut.Mmap(MemExt(ut, 5, 123));      // map [page0 - page5:123]
+        ut.Munmap(MemExt(ut, 2, 120, 3)); // unmap [page3 - page5:120]
 
         // allocated block is [page0 - page2], and unallocated is [page4:page7].
         blk_info2_t alloc_blk[] = { {0, 2, 3, 0} };
@@ -270,14 +312,32 @@ main(int argc, char** argv) {
     // Test2: unmapping the leading port of mapped area
     {
         UNIT_TEST ut(2, 8);
-        ut.Mmap(5, 123);     // map [page0 - page5:123]
-        ut.Unmap(0, 3, 450); // unmap [page0 - page3:450]
+        ut.Mmap(MemExt(ut, 5, 123));     // map [page0 - page5:123]
+        ut.Munmap(MemExt(ut, 3, 450, 0));// unmap [page0 - page3:450]
 
         // allocated [page4 - page5:123], and free blocks are :
         //   - [page0 - page4]. and
         //   - [page6 - page7]
         blk_info2_t alloc_blk[] = { {4, 1, 1, 123} };
         blk_info2_t free_blk[] = { {0, 2, 4, 0}, {6, 1, 2, 0}};
+        ut.VerifyStatus(alloc_blk, ARRAY_SIZE(alloc_blk),
+                        free_blk, ARRAY_SIZE(free_blk));
+    }
+
+    fprintf(stdout, "\n>>Remap unit testing\n");
+
+    // Test1:
+    {
+        // allocate 16-page trunk, then allocate 2 pages, then expand allocated
+        // block to 7 pages.
+        UNIT_TEST ut(1, 16);
+        ut.Mmap(MemExt(ut, 1, 123)); // allocate one-page + 123-byte.
+
+        // expand to 6-page + 234 bytes.
+        ut.Mremap(MemExt(ut, 1, 123, 0), MemExt(ut, 6, 234));
+
+        blk_info2_t alloc_blk[] = { {0, 3, 6, 234} };
+        blk_info2_t free_blk[] = { {8, 3, 8, 0} };
         ut.VerifyStatus(alloc_blk, ARRAY_SIZE(alloc_blk),
                         free_blk, ARRAY_SIZE(free_blk));
     }

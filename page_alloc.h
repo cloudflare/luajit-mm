@@ -115,7 +115,6 @@ remove_free_block(page_idx_t block, int order) {
 
     ASSERT(page->order == order && find_block(block, order, NULL));
     ASSERT(!is_allocated_blk(page) && verify_order(block, order));
-    set_allocated_blk(page);
 
     return rbt_delete(&alloc_info->free_blks[order], block);
 }
@@ -134,6 +133,11 @@ add_free_block(page_idx_t block, int order) {
 
     return rbt_insert(&alloc_info->free_blks[order], block, 0);
 }
+
+/* The extend given the exiting allocated block such that it could accommodate
+ * at least new_sz bytes.
+ */
+int extend_alloc_block(page_idx_t block, size_t new_sz);
 
 static inline int
 add_alloc_block(page_idx_t block, intptr_t sz, int order) {
