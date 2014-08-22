@@ -51,9 +51,9 @@ public:
                       blk_info2_t* free_blk_v, int free_blk_v_len);
 
     int getPageSize() const { return _page_size; }
-    char* getChunkBase() const { return _trunk_base; }
+    char* getChunkBase() const { return _chunk_base; }
     char* getPageAddr(int page_idx) const {
-        return _trunk_base + page_idx * getPageSize();
+        return _chunk_base + page_idx * getPageSize();
     }
 
     // Allocate "full_page_num * page-size + fraction" bytes.
@@ -76,7 +76,7 @@ private:
     int _page_num;
     bool _init_succ;
     bool _test_succ;
-    char* _trunk_base;
+    char* _chunk_base;
 };
 
 inline size_t
@@ -98,10 +98,10 @@ UNIT_TEST::UNIT_TEST(int test_id, int page_num)
     _page_size = sysconf(_SC_PAGESIZE);
     if (_init_succ) {
         const lm_status_t* status = lm_get_status();
-        _trunk_base = status->first_page;
+        _chunk_base = status->first_page;
         lm_free_status(const_cast<lm_status_t*>(status));
     } else {
-        _trunk_base = NULL;
+        _chunk_base = NULL;
     }
 
     fprintf(stderr, " unit test %0d ...", test_id);
@@ -261,7 +261,7 @@ main(int argc, char** argv) {
     // test1
     //
     {
-        //allocate trunk containing 2+4+8 pages.
+        //allocate chunk containing 2+4+8 pages.
         UNIT_TEST ut(1, 2+4+8);
 
         // allocate 103 bytes
@@ -328,7 +328,7 @@ main(int argc, char** argv) {
 
     // Test1:
     {
-        // allocate 16-page trunk, then allocate 2 pages, then expand allocated
+        // allocate 16-page chunk, then allocate 2 pages, then expand allocated
         // block to 7 pages.
         UNIT_TEST ut(1, 16);
         ut.Mmap(MemExt(ut, 1, 123)); // allocate one-page + 123-byte.

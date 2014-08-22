@@ -18,8 +18,8 @@ extern "C" {
  * and testing purpose.
  */
 typedef struct {
-    /* < 0       : the initial trunk contains as many pages as possible:
-     * otherwise : the init trunk contains *exactly* as many pages as specified.
+    /* < 0       : the initial chunk contains as many pages as possible:
+     * otherwise : the init chunk contains *exactly* as many pages as specified.
      */
     int page_num;
 } lj_mm_opt_t;

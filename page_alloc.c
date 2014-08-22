@@ -6,7 +6,7 @@
 #include "rbtree.h"
 #include "util.h"
 #include "lj_mm.h"
-#include "trunk.h"
+#include "chunk.h"
 #include "page_alloc.h"
 
 /* Forward Decl */
@@ -14,8 +14,8 @@ lm_alloc_t* alloc_info = NULL;
 
 /* Initialize the page allocator, return 0 on success, 1 otherwise. */
 int
-lm_init_page_alloc(lm_trunk_t* trunk, lj_mm_opt_t* mm_opt) {
-    if (!trunk) {
+lm_init_page_alloc(lm_chunk_t* chunk, lj_mm_opt_t* mm_opt) {
+    if (!chunk) {
         /* Trunk is not yet allocated */
         return 0;
     }
@@ -25,7 +25,7 @@ lm_init_page_alloc(lm_trunk_t* trunk, lj_mm_opt_t* mm_opt) {
         return 1;
     }
 
-    int page_num = trunk->page_num;
+    int page_num = chunk->page_num;
     if (unlikely(mm_opt != NULL)) {
         int pn = mm_opt->page_num;
         if (((pn > 0) && (pn > page_num)) || !pn)
@@ -40,10 +40,10 @@ lm_init_page_alloc(lm_trunk_t* trunk, lj_mm_opt_t* mm_opt) {
     if (!alloc_info)
         return 0;
 
-    alloc_info->first_page = trunk->start;
+    alloc_info->first_page = chunk->start;
     alloc_info->page_num   = page_num;
-    alloc_info->page_size  = trunk->page_size;
-    alloc_info->page_size_log2 = log2_int32(trunk->page_size);
+    alloc_info->page_size  = chunk->page_size;
+    alloc_info->page_size_log2 = log2_int32(chunk->page_size);
 
     /* Init the page-info */
     char* p =  (char*)(alloc_info + 1);

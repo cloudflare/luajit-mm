@@ -6,23 +6,23 @@
 #define LJMM_ADDR_UPBOUND ((unsigned int)0x80000000)
 
 /* "Huge" chunk of memmory. Memmory allocations are to carve blocks
- *  from the big trunk.
+ *  from the big chunk.
  */
 typedef struct {
-    char* base;                 /* the starting address of the big trunk */
+    char* base;                 /* the starting address of the big chunk */
     char* start;                /* the starting address of the usable portion */
-    unsigned alloc_size;        /* the size of the big trunk */
+    unsigned alloc_size;        /* the size of the big chunk */
     unsigned usable_size;       /* the size of the usable portion.
                                  * usabe_size = page_num * page_size.
                                  */
     unsigned page_num;           /* number of available pages */
     unsigned page_size;          /* cache of sysconf(_SC_PAGESIZE); */
-} lm_trunk_t;
+} lm_chunk_t;
 
-lm_trunk_t* lm_alloc_trunk(void);
-void lm_free_trunk(void);
+lm_chunk_t* lm_alloc_chunk(void);
+void lm_free_chunk(void);
 #ifdef DEBUG
-void lm_dump_trunk(FILE* f);
+void lm_dump_chunk(FILE* f);
 #endif
 
 #ifdef DEBUG

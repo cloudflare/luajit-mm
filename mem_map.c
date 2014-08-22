@@ -414,7 +414,7 @@ lm_fini(void) {
     ENTER_MUTEX;
 
     lm_fini_page_alloc();
-    lm_free_trunk();
+    lm_free_chunk();
 
     LEAVE_MUTEX;
 }
@@ -450,7 +450,7 @@ lm_init_helper(int auto_fini, lj_mm_opt_t* mm_opt) {
     }
 
     if (res)
-        res = lm_init_page_alloc(lm_alloc_trunk(), mm_opt);
+        res = lm_init_page_alloc(lm_alloc_chunk(), mm_opt);
 
     return res;
 }
