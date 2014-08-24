@@ -6,15 +6,15 @@
 #include "util.h"
 #include "chunk.h"
 #include "lj_mm.h"
+#include "ljmm_conf.h"
 
-#define LM_ADDR_UPBOUND     ((uint)0x80000000)
-#define SIZE_1MB            ((uint)0x100000)
-#define SIZE_1GB            ((uint)0x40000000)
+#define SIZE_1MB ((uint)0x100000)
+#define SIZE_1GB ((uint)0x40000000)
 
 /* If we end up allocating a chunk no larger than this size, we might as well
  * pull the plug, and give up for good.
  */
-#define MEM_TOO_SMALL   (SIZE_1MB * 8)
+#define MEM_TOO_SMALL (SIZE_1MB * 8)
 
 static lm_chunk_t big_chunk;
 
@@ -27,7 +27,7 @@ lm_alloc_chunk (void) {
     uintptr_t page_sz = sysconf(_SC_PAGESIZE);
     cur_brk = (page_sz - 1 + cur_brk) & ~(page_sz - 1);
 
-    uint avail = LM_ADDR_UPBOUND - ((intptr_t)cur_brk);
+    uint avail = LJMM_AS_UPBOUND - ((intptr_t)cur_brk);
     avail = avail & ~(page_sz - 1);
     if (avail < MEM_TOO_SMALL) {
         /* We can achieve almost nothing with 1MB, might as well bail out. */

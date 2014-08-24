@@ -37,8 +37,10 @@ lm_init_page_alloc(lm_chunk_t* chunk, lj_mm_opt_t* mm_opt) {
                    sizeof(lm_page_t) * (page_num + 1);
 
     alloc_info = (lm_alloc_t*) malloc(alloc_sz);
-    if (!alloc_info)
+    if (!alloc_info) {
+        errno = ENOMEM;
         return 0;
+    }
 
     alloc_info->first_page = chunk->start;
     alloc_info->page_num   = page_num;

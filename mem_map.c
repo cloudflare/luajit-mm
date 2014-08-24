@@ -13,6 +13,7 @@ static int lm_unmap_helper(void* addr, size_t um_size);
 
 void*
 lm_malloc(size_t sz) {
+    errno = 0;
     if (!alloc_info) {
         lm_init(1);
         if (!alloc_info)
@@ -26,8 +27,10 @@ lm_malloc(size_t sz) {
         req_order = 0;
 
     int max_order = alloc_info->max_order;
-    if (req_order > max_order)
+    if (req_order > max_order) {
+        errno = ENOMEM;
         return 0;
+    }
 
     rb_tree_t* free_blks = alloc_info->free_blks;
 

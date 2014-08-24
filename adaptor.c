@@ -80,11 +80,13 @@
     #define _GNU_SOURCE
 #endif
 #include <sys/mman.h>
+#include <errno.h>
 #include <unistd.h>
 #include <dlfcn.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <malloc.h>
+#include "ljmm_conf.h"
 #include "lj_mm.h"
 #include "util.h"
 
@@ -98,7 +100,7 @@ static int enable_trace = 1;
 static int init_done = 0;
 
 /* The upbound of the address space */
-#define AS_UPBOUND  ((uintptr_t)0x80000000)
+#define LJMM_AS_UPBOUND  ((uintptr_t)0x80000000)
 
 /* "noinline" such that we can manually invoke this function in gdb */
 static int __attribute__((noinline))
@@ -114,6 +116,16 @@ init_adaptor(void) {
 
 void __attribute__((constructor))
 init_before_main() {
+    const char* t = getenv("ENABLE_LJMM");
+    if (t) {
+        int res = sscanf(t, "%d", &enable_ljmm);
+        if (res < 0 || t[res] != '\0' ||
+            (enable_ljmm != 0 && enable_ljmm != 1)) {
+            fprintf(stderr, "ENABLE_LJMM={0|1}\n");
+            enable_ljmm = 0;
+        }
+    }
+
     if (enable_ljmm)
         init_adaptor();
 }
@@ -121,21 +133,34 @@ init_before_main() {
 void*
 __wrap_mmap64(void *addr, size_t length, int prot, int flags,
        int fd, off_t offset) {
-    if (!init_done || addr || !(flags & (MAP_ANONYMOUS|MAP_ANON))) {
-        void* p = mmap64(addr, length, prot, flags, fd, offset);
+    const char* func = __FUNCTION__;
+    void* blk = NULL;
+
+    fprintf(stderr, "init_done = %d, addr = %p, flags = %d\n", init_done, addr, flags);
+    if (init_done && !addr && (flags & (MAP_ANONYMOUS|MAP_ANON))) {
+        blk = lm_mmap(addr, length, prot, flags|MAP_32BIT, fd, offset);
         if (unlikely(enable_trace)) {
-            fprintf(stderr, "mmap: %p = (%p, %lu, %d, %d, %d, %lu)\n",
-                    p, addr, length, prot, flags, fd, offset);
+            fprintf(stderr,
+                    "%s: call lm_mmap: %p = (%p, %lu, %d, %d, %d, %lu)\n",
+                    func, blk, addr, length, prot, flags, fd, offset);
         }
-        return p;
+
+        if (blk || errno != ENOMEM)
+            return blk;
+
+        /* Fall back to mmap() */
+        if (unlikely(enable_trace)) {
+            fprintf(stderr, "%s: OOM\n", func);
+        }
     }
 
-    void* p = lm_mmap(addr, length, prot, flags|MAP_32BIT, fd, offset);
+    blk = mmap64(addr, length, prot, flags, fd, offset);
     if (unlikely(enable_trace)) {
-        fprintf(stderr, "lm_mmap: %p = (%p, %lu, %d, %d, %d, %lu)\n",
-                p, addr, length, prot, flags, fd, offset);
+        fprintf(stderr, "mmap: %p = (%p, %lu, %d, %d, %d, %lu)\n",
+                blk, addr, length, prot, flags, fd, offset);
     }
-    return p;
+
+    return blk;
 }
 
 void*
@@ -146,7 +171,7 @@ __wrap_mmap(void *addr, size_t length, int prot, int flags,
 
 int
 __wrap_munmap(void *addr, size_t length) {
-    if (!init_done || addr > (void*)AS_UPBOUND) {
+    if (!init_done || addr >= (void*)LJMM_AS_UPBOUND) {
         int ret = munmap(addr, length);
         if (unlikely(enable_trace)) {
             fprintf(stderr, "munmap: %d = (%p, %lu)\n", ret, addr, length);
@@ -163,7 +188,7 @@ __wrap_munmap(void *addr, size_t length) {
 
 void*
 __wrap_mremap(void *old_addr, size_t old_size, size_t new_size, int flags, ...) {
-    if (!init_done || old_addr > (void*)AS_UPBOUND) {
+    if (!init_done || old_addr > (void*)LJMM_AS_UPBOUND) {
         void* p = NULL;
         if (!(flags & MREMAP_FIXED)) {
             p = mremap(old_addr, old_size, new_size, flags);
