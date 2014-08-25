@@ -187,7 +187,8 @@ __wrap_munmap(void *addr, size_t length) {
 }
 
 void*
-__wrap_mremap(void *old_addr, size_t old_size, size_t new_size, int flags, ...) {
+__wrap_mremap(void *old_addr, size_t old_size, size_t new_size,
+              int flags, ...) {
     if (!init_done || old_addr > (void*)LJMM_AS_UPBOUND) {
         void* p = NULL;
         if (!(flags & MREMAP_FIXED)) {

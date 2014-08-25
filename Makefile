@@ -6,7 +6,7 @@ default : all
 AR_NAME := libljmm.a
 SO_NAME := libljmm.so
 
-OPT_FLAGS = -O0 -g -DDEBUG
+OPT_FLAGS = -O3 -g -DDEBUG
 CFLAGS = -fvisibility=hidden -MMD -Wall $(OPT_FLAGS)
 CXXFLAGS = $(CFLAGS)
 
