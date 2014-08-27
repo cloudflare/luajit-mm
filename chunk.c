@@ -41,6 +41,8 @@ lm_alloc_chunk (void) {
     if (!chunk)
         return NULL;
 
+    madvise((void*)chunk, avail, MADV_DONTNEED|MADV_DONTDUMP);
+
     big_chunk.base = (char*)chunk;
     big_chunk.start = (char*)chunk;
     big_chunk.alloc_size = avail;

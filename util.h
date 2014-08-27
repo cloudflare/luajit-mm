@@ -17,6 +17,9 @@
 
 typedef unsigned int uint;
 
+typedef int page_id_t;
+typedef int page_idx_t;
+
 static inline int
 ceil_log2_int32 (unsigned num) {
     int res = 31 - __builtin_clz(num);

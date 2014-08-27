@@ -52,7 +52,7 @@ lm_malloc(size_t sz) {
     if (blk_idx == -1)
         return NULL;
 
-    remove_free_block(blk_idx, blk_order);
+    remove_free_block(blk_idx, blk_order, 0);
 
     /* The free block may be too big. If this is the case, keep splitting
      * the block until it tightly fit the allocation request.

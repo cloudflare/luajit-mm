@@ -6,7 +6,7 @@ default : all
 AR_NAME := libljmm.a
 SO_NAME := libljmm.so
 
-OPT_FLAGS = -O3 -g -DDEBUG
+OPT_FLAGS = -O3 -march=native -g -DDEBUG
 CFLAGS = -fvisibility=hidden -MMD -Wall $(OPT_FLAGS)
 CXXFLAGS = $(CFLAGS)
 
@@ -23,7 +23,7 @@ BUILD_AR_DIR = obj/lib
 BUILD_SO_DIR = obj/so
 
 RB_TREE_SRCS = rbtree.c
-ALLOC_SRCS = chunk.c page_alloc.c mem_map.c
+ALLOC_SRCS = chunk.c block_cache.c page_alloc.c mem_map.c
 
 C_SRCS = $(RB_TREE_SRCS) $(ALLOC_SRCS)
 C_OBJS = ${C_SRCS:%.c=%.o}

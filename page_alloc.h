@@ -5,6 +5,7 @@
 #include "util.h"
 #include "chunk.h" /* for lm_chunk_t */
 #include "lj_mm.h"
+#include "block_cache.h"
 
 /**************************************************************************
  *
@@ -79,10 +80,6 @@ typedef struct {
 
 extern lm_alloc_t* alloc_info;
 
-/* Page index to ID conversion */
-typedef int page_id_t;
-typedef int page_idx_t;
-
 static inline page_id_t
 page_idx_to_id(page_idx_t idx) {
     ASSERT(idx >= 0 && idx < alloc_info->page_num);
@@ -94,6 +91,11 @@ page_id_to_idx(page_id_t id) {
     int idx = id - alloc_info->idx_2_id_adj;
     ASSERT(idx >= 0 && idx < alloc_info->page_num);
     return idx;
+}
+
+static inline char*
+get_page_addr(page_idx_t pg) {
+    return alloc_info->first_page + (pg << alloc_info->page_size_log2);
 }
 
 static inline int
@@ -109,14 +111,17 @@ find_block(page_idx_t block, int order, intptr_t* value) {
     return rbt_search(&alloc_info->free_blks[order], block, value);
 }
 
+/* If zap_pages is set, the corresponding pages will be removed via madvise()*/
 static inline int
-remove_free_block(page_idx_t block, int order) {
+remove_free_block(page_idx_t block, int order, int zap_pages) {
     lm_page_t* page = alloc_info->page_info + block;
 
     ASSERT(page->order == order && find_block(block, order, NULL));
     ASSERT(!is_allocated_blk(page) && verify_order(block, order));
 
-    return rbt_delete(&alloc_info->free_blks[order], block);
+    bc_remove_block(block, order, zap_pages);
+
+    return rbt_delete(&alloc_info->free_blks[order], block, NULL);
 }
 
 /* Add the free block of the given "order" to the buddy system */
@@ -131,6 +136,7 @@ add_free_block(page_idx_t block, int order) {
     set_page_leader(page);
     reset_allocated_blk(page);
 
+    bc_add_blk(block, order);
     return rbt_insert(&alloc_info->free_blks[order], block, 0);
 }
 
@@ -149,13 +155,18 @@ add_alloc_block(page_idx_t block, intptr_t sz, int order) {
     set_page_leader(pg);
     set_allocated_blk(pg);
 
+    bc_remove_block(block, order, 0);
+    madvise(alloc_info->first_page + block,
+            (1 << order) << alloc_info->page_size_log2,
+            MADV_DODUMP);
+
     return res;
 }
 
 static inline int
 remove_alloc_block(page_idx_t block) {
     ASSERT(is_page_leader(alloc_info->page_info + block));
-    int res = rbt_delete(&alloc_info->alloc_blks, block);
+    int res = rbt_delete(&alloc_info->alloc_blks, block, NULL);
     ASSERT(res);
     return res;
 }

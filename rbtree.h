@@ -39,7 +39,7 @@ void rbt_fini(rb_tree_t*);
 
 /* RB-tree operations */
 int rbt_insert(rb_tree_t*, int key, intptr_t val);
-int rbt_delete(rb_tree_t*, int key);
+int rbt_delete(rb_tree_t*, int key, intptr_t* val);
 int rbt_get_min(rb_tree_t*);
 int rbt_get_max(rb_tree_t*);
 

@@ -8,6 +8,7 @@
 #include "lj_mm.h"
 #include "chunk.h"
 #include "page_alloc.h"
+#include "block_cache.h"
 
 /* Forward Decl */
 lm_alloc_t* alloc_info = NULL;
@@ -103,6 +104,9 @@ lm_init_page_alloc(lm_chunk_t* chunk, lj_mm_opt_t* mm_opt) {
         }
     }
 
+    /*init the block cache */
+    bc_init();
+
     return 1;
 }
 
@@ -119,6 +123,8 @@ lm_fini_page_alloc(void) {
         free(alloc_info);
         alloc_info = 0;
     }
+
+    bc_fini();
 }
 
 /* The extend given the exiting allocated block such that it could accommodate
@@ -138,7 +144,7 @@ extend_alloc_block(page_idx_t block_idx, size_t new_sz) {
     page_id_t blk_id = page_idx_to_id(block_idx);
     int order = alloc_info->page_info[block_idx].order;
 
-    /* step 1: perfrom try run to see if we have luck. */
+    /* step 1: perfrom dry-run to see if we have luck. */
     int succ = 0;
     int ord;
     for (ord = order; ord <= alloc_info->max_order; ord++) {
@@ -169,7 +175,7 @@ extend_alloc_block(page_idx_t block_idx, size_t new_sz) {
     for (t = order; t < ord; t++) {
         page_id_t buddy_id = blk_id ^ (1 << t);
         int buddy_idx = page_id_to_idx(buddy_id);
-        remove_free_block(buddy_idx, t);
+        remove_free_block(buddy_idx, t, 0);
         reset_page_leader(alloc_info->page_info + buddy_idx);
     }
 
@@ -187,11 +193,6 @@ free_block(page_idx_t page_idx) {
     int order = page->order;
     ASSERT (find_block(page_idx, order, NULL) == 0);
 
-    char* block_addr = alloc_info->first_page +
-                       (page_idx << alloc_info->page_size_log2);
-    size_t block_len = (1<<order) << alloc_info->page_size_log2;
-    madvise(block_addr, block_len, MADV_DONTNEED);
-
     /* Consolidate adjacent buddies */
     int page_num = alloc_info->page_num;
     page_id_t page_id = page_idx_to_id(page_idx);
@@ -208,7 +209,7 @@ free_block(page_idx_t page_idx) {
             is_allocated_blk(pi + buddy_idx)) {
             break;
         }
-        remove_free_block(buddy_idx, order);
+        remove_free_block(buddy_idx, order, 0);
         reset_page_leader(alloc_info->page_info + buddy_idx);
 
         page_id = page_id < buddy_id ? page_id : buddy_id;

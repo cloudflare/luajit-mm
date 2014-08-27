@@ -591,11 +591,14 @@ rbt_delete_fixup(rb_tree_t* rbt, int node_idx) {
 }
 
 int
-rbt_delete(rb_tree_t* rbt, int key) {
+rbt_delete(rb_tree_t* rbt, int key, intptr_t* val) {
     /* step 1: find the element to be deleted */
     int nd_idx = bst_search(rbt, key);
     if (nd_idx == INVALID_IDX)
         return 0;
+
+    if (val)
+        *val = rbt->tree[nd_idx].value;
 
     /* step 2: delete the element as we normally do with a binary-search tree */
     rb_node_t* nd_vect = rbt->tree;

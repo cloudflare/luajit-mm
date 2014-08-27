@@ -99,7 +99,7 @@ private:
         if (!rbt_verify(_rbt))
             return false;
 
-        int ret = rbt_delete(_rbt, val);
+        int ret = rbt_delete(_rbt, val, 0);
 
         if (_dump_tree)
             Dump_Tree("after_del");
