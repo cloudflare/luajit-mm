@@ -75,6 +75,12 @@
  *  5. run application with libptmalloc3.so and libadaptor.so .e.g
  *   LD_PRELOAD="/the/path/to/libptmalloc3.so /the/path/to/libadaptor.so" \
  *      /my/application [arguments]
+ *
+ * Miscellaneous
+ * -------------
+ *   Some functionalities can be turned on/off via following environment variables.
+ *     - ENABLE_LJMM = {0|1}
+ *     - ENABLE_LJMM_TRACE = {0|1}
  */
 #ifndef _GNU_SOURCE
     #define _GNU_SOURCE
@@ -94,7 +100,7 @@
  * right after main() is hit.
  */
 static int enable_ljmm = 1;
-static int enable_trace = 1;
+static int enable_trace = 0;
 
 /* Set to non-zero after initialization is successfully done.*/
 static int init_done = 0;
@@ -123,6 +129,16 @@ init_before_main() {
             (enable_ljmm != 0 && enable_ljmm != 1)) {
             fprintf(stderr, "ENABLE_LJMM={0|1}\n");
             enable_ljmm = 0;
+        }
+    }
+
+    t = getenv("ENABLE_LJMM_TRACE");
+    if (t) {
+        int res = sscanf(t, "%d", &enable_trace);
+        if (res < 0 || t[res] != '\0' ||
+            (enable_trace != 0 && enable_trace != 1)) {
+            fprintf(stderr, "ENABLE_LJMM_TRACE={0|1}\n");
+            enable_trace = 0;
         }
     }
 
@@ -166,8 +182,7 @@ __wrap_mmap64(void *addr, size_t length, int prot, int flags,
 void*
 __wrap_mmap(void *addr, size_t length, int prot, int flags,
      int fd, off_t offset) {
-    return __wrap_mmap64(addr, length, prot, flags, fd, offset);
-}
+    return __wrap_mmap64(addr, length, prot, flags, fd, offset); }
 
 int
 __wrap_munmap(void *addr, size_t length) {

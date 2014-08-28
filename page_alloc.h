@@ -103,7 +103,7 @@ verify_order(page_idx_t blk_leader, int order) {
     return 0 == (page_idx_to_id(blk_leader) & ((1<<order) - 1));
 }
 
-static int
+static inline int
 find_block(page_idx_t block, int order, intptr_t* value) {
     ASSERT(order >= 0 && order <= alloc_info->max_order &&
            verify_order(block, order));
@@ -114,10 +114,13 @@ find_block(page_idx_t block, int order, intptr_t* value) {
 /* If zap_pages is set, the corresponding pages will be removed via madvise()*/
 static inline int
 remove_free_block(page_idx_t block, int order, int zap_pages) {
+#ifdef DEBUG
+    {
     lm_page_t* page = alloc_info->page_info + block;
-
     ASSERT(page->order == order && find_block(block, order, NULL));
     ASSERT(!is_allocated_blk(page) && verify_order(block, order));
+    }
+#endif
 
     bc_remove_block(block, order, zap_pages);
 
@@ -175,7 +178,11 @@ static inline void
 migrade_alloc_block(page_idx_t block, int ord_was, int ord_is, size_t new_map_sz) {
     rb_tree_t* rbt = &alloc_info->alloc_blks;
     int res = rbt_set_value(rbt, block, new_map_sz);
+#ifdef DEBUG
     ASSERT(res != 0 && alloc_info->page_info[block].order == ord_was);
+#else
+    (void)res;
+#endif
     alloc_info->page_info[block].order = ord_is;
 }
 

@@ -1,3 +1,7 @@
+/* This file is to allocate a big chunk of memory right after .bss. Subsequent
+ * lm_mmap() is to serve the allocation request by carving smaller blocker out
+ * of this big chunk of memory.
+ */
 #include <sys/mman.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -25,6 +29,9 @@ lm_alloc_chunk (void) {
 
     uintptr_t cur_brk = (uintptr_t)sbrk(0);
     uintptr_t page_sz = sysconf(_SC_PAGESIZE);
+
+    /* The chunk or memory must be page-aligned, and are multiple pages in size.
+     */
     cur_brk = (page_sz - 1 + cur_brk) & ~(page_sz - 1);
 
     uint avail = LJMM_AS_UPBOUND - ((intptr_t)cur_brk);
@@ -41,6 +48,9 @@ lm_alloc_chunk (void) {
     if (!chunk)
         return NULL;
 
+    /* If the program linked to this lib generates code-dump, do not dump those
+     * portions which are not allocated at all.
+     */
     madvise((void*)chunk, avail, MADV_DONTNEED|MADV_DONTDUMP);
 
     big_chunk.base = (char*)chunk;

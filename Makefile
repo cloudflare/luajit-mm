@@ -6,8 +6,8 @@ default : all
 AR_NAME := libljmm.a
 SO_NAME := libljmm.so
 
-OPT_FLAGS = -O3 -march=native -g -DDEBUG
-CFLAGS = -fvisibility=hidden -MMD -Wall $(OPT_FLAGS)
+OPT_FLAGS = -O3 -g -march=native -DDEBUG
+CFLAGS = -DENABLE_TESTING -fvisibility=hidden -MMD -Wall $(OPT_FLAGS)
 CXXFLAGS = $(CFLAGS)
 
 # Addition flag for building libljmm.a and libljmm.so respectively.

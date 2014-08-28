@@ -3,6 +3,7 @@
 #include <sys/mman.h>
 #include "lj_mm.h"
 
+/* TODO: this demo is junk, we need better demo... */
 static void*
 mmap_wrap(size_t len) {
     return lm_mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_32BIT | MAP_PRIVATE, -1, 0);
@@ -10,6 +11,7 @@ mmap_wrap(size_t len) {
 
 int
 main(int argc, char** argv) {
+#if defined(DEBUG)
     lm_init(1);
     dump_page_alloc(stderr);
 
@@ -48,6 +50,6 @@ main(int argc, char** argv) {
     fprintf(stderr, "\n\nAfter delete all allocations\n");
     dump_page_alloc(stderr);
     /*lm_fini(); */
-
+#endif
     return 0;
 }

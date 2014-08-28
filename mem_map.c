@@ -1,3 +1,6 @@
+/* This file contains the implementation to following exported functions:
+ *   lm_mmap(), lm_munmap(), lm_mremap(), lm_malloc(), lm_free().
+ */
 #ifndef _GNU_SOURCE
     #define _GNU_SOURCE
 #endif
@@ -11,6 +14,9 @@
 /* Forward Decl */
 static int lm_unmap_helper(void* addr, size_t um_size);
 
+/* For allocating "big" blocks (about one page in size, or across multiple
+ * pages). The return value is page-aligned.
+ */
 void*
 lm_malloc(size_t sz) {
     errno = 0;
@@ -78,23 +84,27 @@ lm_free(void* mem) {
         return 0;
 
     long page_sz = alloc_info->page_size;
-    if (unlikely ((ofst & (page_sz - 1))))
+    if (unlikely ((ofst & (page_sz - 1)))) {
+        /* the lm_malloc()/lm_mmap() return page-aligned block */
         return 0;
+    }
 
-    long page_id = ofst >> log2_int32(page_sz);
+    long page_idx = ofst >> log2_int32(page_sz);
     int page_num = alloc_info->page_num;
-    if (unlikely(page_id >= page_num))
+    if (unlikely(page_idx >= page_num))
         return 0;
 
     lm_page_t* pi = alloc_info->page_info;
-    lm_page_t* page = pi + page_id;
+    lm_page_t* page = pi + page_idx;
+
+    /* Check to see if it's a previously allocated block */
     if (unlikely(!is_page_leader(page)))
         return 0;
 
     if (unlikely(!is_allocated_blk(page)))
         return 0;
 
-    return free_block(page_id);
+    return free_block(page_idx);
 }
 
 /*****************************************************************************
@@ -102,6 +112,10 @@ lm_free(void* mem) {
  *      Implementation of lm_mremap()
  *
  *****************************************************************************
+ */
+
+/* lm_mremap() herlper. Return NULL instead of MAP_FAILED in case it was not
+ * successful. It also tries to set errno if fails.
  */
 static void*
 lm_mremap_helper(void* old_addr, size_t old_size, size_t new_size, int flags) {
@@ -131,7 +145,9 @@ lm_mremap_helper(void* old_addr, size_t old_size, size_t new_size, int flags) {
     int old_page_num = (old_size + page_sz - 1) >> page_sz_log2;
     int new_page_num = (new_size + page_sz - 1) >> page_sz_log2;
 
-    /* Shrink the existing allocated block */
+    /* case 1: Shrink the existing allocated block by reducing the number of
+     *      mapping pages.
+     */
     if (old_page_num > new_page_num) {
         char* unmap_start = (char*)alloc_info->first_page +
                             (new_page_num << page_sz_log2);
@@ -144,7 +160,7 @@ lm_mremap_helper(void* old_addr, size_t old_size, size_t new_size, int flags) {
         return NULL;
     }
 
-    /* Expand the existing allocated block */
+    /* case 2: Expand the existing allocated block by adding more pages. */
     if (old_page_num < new_page_num) {
         int order = alloc_info->page_info[page_idx].order;
         /* Block is big enough to accommodate the old-size byte.*/
@@ -172,11 +188,14 @@ lm_mremap_helper(void* old_addr, size_t old_size, size_t new_size, int flags) {
         return NULL;
     }
 
+    /* case 3: Change the mapping size, but we don't need to change the number
+     *   of mapping pages, as the new- and old-end of mapping area reside in
+     *   the same block.
+     */
     ASSERT(old_page_num == new_page_num);
     rbt_set_value(&alloc_info->alloc_blks, page_idx, new_size);
 
-    return old_addr;
-}
+    return old_addr; }
 
 void*
 lm_mremap(void* old_addr, size_t old_size, size_t new_size, int flags) {
@@ -198,7 +217,7 @@ typedef struct {
     int order;          /* The order of the mapped block */
     int m_page_idx;     /* The index of the 1st page of the mapped block*/
     int m_end_idx;
-    int um_page_idx;
+    int um_page_idx;    /* The index of the 1st page to be unmapped*/
     int um_end_idx;
     size_t m_size;      /* The mmap size in byte.*/
 } unmap_info_t;
@@ -281,6 +300,7 @@ unmap_higher_part(const unmap_info_t* ui) {
 
     return split;
 }
+
 /* Helper function of lm_munmap() */
 static int
 lm_unmap_helper(void* addr, size_t um_size) {

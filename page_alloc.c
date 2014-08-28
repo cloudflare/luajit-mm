@@ -13,7 +13,7 @@
 /* Forward Decl */
 lm_alloc_t* alloc_info = NULL;
 
-/* Initialize the page allocator, return 0 on success, 1 otherwise. */
+/* Initialize the page allocator, return 1 on success, 0 otherwise. */
 int
 lm_init_page_alloc(lm_chunk_t* chunk, lj_mm_opt_t* mm_opt) {
     if (!chunk) {
@@ -28,10 +28,15 @@ lm_init_page_alloc(lm_chunk_t* chunk, lj_mm_opt_t* mm_opt) {
 
     int page_num = chunk->page_num;
     if (unlikely(mm_opt != NULL)) {
-        int pn = mm_opt->page_num;
+        int pn = mm_opt->chunk_sz_in_page;
         if (((pn > 0) && (pn > page_num)) || !pn)
             return 0;
         page_num = pn;
+
+        if (!bc_set_parameter(mm_opt->enable_block_cache,
+                              mm_opt->blk_cache_in_page)) {
+            return 0;
+        }
     }
 
     int alloc_sz = sizeof(lm_alloc_t) +
@@ -135,7 +140,11 @@ extend_alloc_block(page_idx_t block_idx, size_t new_sz) {
     rb_tree_t* rbt = &alloc_info->alloc_blks;
     intptr_t alloc_sz;
     int res = rbt_search(rbt, block_idx, &alloc_sz);
+#ifdef DEBUG
     ASSERT(res);
+#else
+    (void)res;
+#endif
 
     int page_sz = alloc_info->page_size;
     int page_sz_log2 = alloc_info->page_size_log2;

@@ -23,9 +23,6 @@
 #define LRU_MAX_ENTRY 64
 #define INVALID_LRU_IDX (-1)
 
-/* About 2M if page-size is 4k in byte. */
-#define MAX_CACHE_PAGE_NUM 512
-
 typedef struct blk_lru {
     page_idx_t start_page;
     short order;
@@ -43,10 +40,18 @@ typedef struct {
     int total_page_num;
 } block_cache_t;
 
+/* Block-cache paprameters */
+static int MAX_CACHE_PAGE_NUM = 512;
 static block_cache_t* blk_cache;
-static char enable_blk_cache = 1;
+static char enable_blk_cache = 0;
 static char blk_cache_init = 0;
 
+/***************************************************************************
+ *
+ *                      LRU related functions
+ *
+ ***************************************************************************
+ */
 static void
 lru_init() {
     int i;
@@ -140,6 +145,12 @@ lru_popback(void) {
     return 0;
 }
 
+/***************************************************************************
+ *
+ *                   block-cache related functions
+ *
+ ***************************************************************************
+ */
 int
 bc_init(void) {
     if (unlikely(blk_cache_init))
@@ -221,8 +232,7 @@ bc_remove_block(page_idx_t start_page, int order, int zap_page) {
     if (!rbt_delete(blk_cache->blks, start_page, &idx))
         return 0;
 
-    blk_lru_t* lru = blk_cache->lru_v + idx;
-    ASSERT(lru->order == order);
+    ASSERT(blk_cache->lru_v[idx].order == order);
     blk_cache->total_page_num -= (1 << order);
     ASSERT(blk_cache->total_page_num >= 0);
 
@@ -242,5 +252,14 @@ bc_evict_oldest() {
         return bc_remove_block(page, lru->order, 1);
     }
 
+    return 1;
+}
+
+int
+bc_set_parameter(int enable_bc, int cache_sz_in_page) {
+    if (cache_sz_in_page > 0)
+        MAX_CACHE_PAGE_NUM = cache_sz_in_page;
+
+    enable_blk_cache = enable_bc;
     return 1;
 }

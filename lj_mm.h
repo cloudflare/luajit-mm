@@ -18,11 +18,31 @@ extern "C" {
  * and testing purpose.
  */
 typedef struct {
-    /* < 0       : the initial chunk contains as many pages as possible:
-     * otherwise : the init chunk contains *exactly* as many pages as specified.
-     */
-    int page_num;
+    int chunk_sz_in_page;   /* "< 0" : default behavior */
+    int enable_block_cache; /* 0 : disable, 1: enable */
+    int blk_cache_in_page;  /* "< 0": use default value */
 } lj_mm_opt_t;
+
+/* Populate lj_mm_opt_t with default value */
+static inline void
+lm_init_mm_opt(lj_mm_opt_t* opt) {
+    opt->chunk_sz_in_page = -1;
+    opt->enable_block_cache = 1;
+    opt->blk_cache_in_page = -1;
+}
+
+/* All exported symbols are prefixed with ljmm_ to reduce the chance of
+ * conflicting with applications being benchmarked.
+ */
+
+#define lm_init     ljmm_init
+#define lm_init2    ljmm_init2
+#define lm_fini     ljmm_fini
+#define lm_mmap     ljmm_mmap
+#define lm_munmap   ljmm_munmap
+#define lm_mremap   ljmm_mremap
+#define lm_malloc   ljmm_malloc
+#define lm_free     ljmm_free
 
 /* Inititalize the memory-management system. If auto_fini is set
  * (i.e. auto_fini != 0), there is no need to call lm_fini() at exit.
