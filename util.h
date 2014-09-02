@@ -32,6 +32,22 @@ log2_int32(unsigned num) {
     return 31 - __builtin_clz(num);
 }
 
+#ifdef FOR_ADAPTOR
+    #define MYMALLOC    __adaptor_malloc
+    #define MYFREE      __adaptor_free
+    #define MYCALLOC    __adaptor_calloc
+    #define MYREALLOC   __adaptor_realloc
+    void* MYMALLOC(size_t);
+    void  MYFREE(void*);
+    void* MYCALLOC(size_t, size_t);
+    void* MYREALLOC(void*, size_t);
+#else
+    #define MYMALLOC    malloc
+    #define MYFREE      free
+    #define MYCALLOC    calloc
+    #define MYREALLOC   realloc
+#endif
+
 #ifdef DEBUG
     // Usage examples: ASSERT(a > b),  ASSERT(foo() && "Opps, foo() reutrn 0");
     #define ASSERT(c) if (!(c))\

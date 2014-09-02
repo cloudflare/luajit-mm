@@ -159,7 +159,7 @@ bc_init(void) {
     if (unlikely(!enable_blk_cache))
         return 0;
 
-    if (!(blk_cache = (block_cache_t*)malloc(sizeof(block_cache_t))))
+    if (!(blk_cache = (block_cache_t*)MYMALLOC(sizeof(block_cache_t))))
         return 0;
 
     blk_cache->blks = rbt_create();

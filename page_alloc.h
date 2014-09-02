@@ -174,6 +174,11 @@ remove_alloc_block(page_idx_t block) {
     return res;
 }
 
+static inline int
+no_alloc_blocks(void) {
+    return rbt_is_empty(&alloc_info->alloc_blks);
+}
+
 static inline void
 migrade_alloc_block(page_idx_t block, int ord_was, int ord_is, size_t new_map_sz) {
     rb_tree_t* rbt = &alloc_info->alloc_blks;

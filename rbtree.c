@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 #include "rbtree.h"
+#include "util.h"
 
 #define INVALID_IDX     (-1)
 #define SENTINEL_IDX    0
@@ -19,7 +20,7 @@
 int
 rbt_init(rb_tree_t* rbt) {
     rbt->capacity = 16;
-    rbt->tree = (rb_node_t*)malloc(rbt->capacity * sizeof(rb_node_t));
+    rbt->tree = (rb_node_t*)MYMALLOC(rbt->capacity * sizeof(rb_node_t));
     if (rbt->tree == 0)
         return 0;
 
@@ -37,7 +38,7 @@ rbt_init(rb_tree_t* rbt) {
 void
 rbt_fini(rb_tree_t* rbt) {
     if (rbt && rbt->tree) {
-        free((void*)rbt->tree);
+        MYFREE((void*)rbt->tree);
         rbt->tree = 0;
         rbt->capacity = rbt->node_num = 0;
         rbt->root = INVALID_IDX;
@@ -46,7 +47,7 @@ rbt_fini(rb_tree_t* rbt) {
 
 rb_tree_t*
 rbt_create(void) {
-    rb_tree_t* rbt = (rb_tree_t*)malloc(sizeof(rb_tree_t));
+    rb_tree_t* rbt = (rb_tree_t*)MYMALLOC(sizeof(rb_tree_t));
     if (rbt && rbt_init(rbt))
         return rbt;
 
@@ -57,7 +58,7 @@ void
 rbt_destroy(rb_tree_t* rbt) {
     if (rbt) {
         rbt_fini(rbt);
-        free((void*)rbt);
+        MYFREE((void*)rbt);
     }
 }
 
@@ -159,7 +160,7 @@ rbt_try_shrink(rb_tree_t* rbt) {
         return 1;
 
     int cap = rbt->node_num * 3 / 2;
-    rbt->tree = (rb_node_t*)realloc(rbt->tree, cap * sizeof(rb_node_t));
+    rbt->tree = (rb_node_t*)MYREALLOC(rbt->tree, cap * sizeof(rb_node_t));
     if (rbt->tree == 0)
         return 0;
 
@@ -212,7 +213,7 @@ bst_insert(rb_tree_t* t, int key, intptr_t value) {
         if (cap <= 16)
             cap = 16;
 
-        nodes = t->tree = (rb_node_t*)realloc(nodes, 100* sizeof(rb_node_t));
+        nodes = t->tree = (rb_node_t*)MYREALLOC(nodes, cap * sizeof(rb_node_t));
         t->capacity = cap;
 
         if (!nodes)
@@ -705,7 +706,7 @@ rbt_verify(rb_tree_t* rbt) {
     int node_num = rbt->node_num;
     rb_node_t* nd_vect = rbt->tree;
 
-    int* cnt = (int*)malloc(sizeof(int) * node_num);
+    int* cnt = (int*)MYMALLOC(sizeof(int) * node_num);
     int i;
     for (i = 0; i < node_num; i++) cnt[i] = 0;
 
@@ -745,12 +746,12 @@ rbt_verify(rb_tree_t* rbt) {
                 /* we either have multiple roots, or rbt->root is not set
                  * properly.
                  */
-                free(cnt);
+                MYFREE(cnt);
                 return 0;
             }
         }
     }
-    free(cnt);
+    MYFREE(cnt);
     cnt = 0;
     if (root_cnt != 1) {
         if (root_cnt == 0 && node_num != 1)

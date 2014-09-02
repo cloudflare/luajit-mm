@@ -45,7 +45,7 @@ lm_alloc_chunk (void) {
         mmap((void*)cur_brk, avail, PROT_READ|PROT_WRITE,
              MAP_PRIVATE | MAP_32BIT | MAP_ANONYMOUS, -1, 0);
 
-    if (!chunk)
+    if (chunk == (uintptr_t)MAP_FAILED)
         return NULL;
 
     /* If the program linked to this lib generates code-dump, do not dump those

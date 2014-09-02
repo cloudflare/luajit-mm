@@ -12,7 +12,7 @@ mmap_wrap(size_t len) {
 int
 main(int argc, char** argv) {
 #if defined(DEBUG)
-    lm_init(1);
+    lm_init();
     dump_page_alloc(stderr);
 
     int size1 = 100;

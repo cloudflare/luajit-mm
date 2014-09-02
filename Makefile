@@ -6,6 +6,9 @@ default : all
 AR_NAME := libljmm.a
 SO_NAME := libljmm.so
 
+# For testing and benchmarking, see details in adaptor.c
+ADAPTOR_SO_NAME := libljmm4adaptor.so
+
 OPT_FLAGS = -O3 -g -march=native -DDEBUG
 CFLAGS = -DENABLE_TESTING -fvisibility=hidden -MMD -Wall $(OPT_FLAGS)
 CXXFLAGS = $(CFLAGS)
@@ -30,27 +33,23 @@ C_OBJS = ${C_SRCS:%.c=%.o}
 
 AR_OBJ = $(addprefix obj/lib/, $(C_OBJS))
 SO_OBJ = $(addprefix obj/so/, $(C_OBJS))
+ADAPTOR_SO_OBJ = $(addprefix obj/so/adaptor_, $(C_OBJS))
 
 # Testing targets and Misc
 #
-UNIT_TEST := unit_test
-ADAPTOR := libadaptor.so
-RBTREE_TEST := rbt_test
 DEMO_NAME := demo
-
-UNIT_TEST_SRCS = unit_test.cxx
-ADAPTOR_SRCS = adaptor.c
-RB_TEST_SRCS = rb_test.cxx
 DEMO_SRCS = demo.c
 
 # Highest level dependency
-all: $(AR_NAME) $(SO_NAME) $(RBTREE_TEST) $(DEMO_NAME) $(UNIT_TEST) $(ADAPTOR)
+all: $(AR_NAME) $(SO_NAME) $(ADAPTOR_SO_NAME) $(RBTREE_TEST) \
+      $(DEMO_NAME) $(UNIT_TEST)
 
-$(RBTREE_TEST) $(DEMO_NAME) $(UNIT_TEST) $(ADAPTOR): $(AR_NAME) $(SO_NAME)
+test $(DEMO_NAME): $(AR_NAME) $(SO_NAME) $(SO_4_ADAPTOR_NAME)
 
 -include ar_dep.txt
 -include so_dep.txt
--include adaptor_dep.txt
+-include adaptor_so_dep.txt
+-include demo_dep.txt
 
 #####################################################################
 #
@@ -70,12 +69,19 @@ $(AR_OBJ) : $(BUILD_AR_DIR)/%.o : %.c
 #  		Building shared lib
 #
 #####################################################################
-$(SO_NAME) : $(SO_OBJ)
-	$(CC) $(CFLAGS) $(AR_BUILD_CFLAGS) $(SO_OBJ) -shared -o $@
-	cat $(BUILD_SO_DIR)/*.d > so_dep.txt
-
 $(SO_OBJ) : $(BUILD_SO_DIR)/%.o : %.c
 	$(CC) -c $(CFLAGS) $(SO_BUILD_CFLAGS) $< -o $@
+
+$(SO_NAME) : $(SO_OBJ)
+	$(CC) $(CFLAGS) $(SO_BUILD_CFLAGS) $(SO_OBJ) -shared -o $(SO_NAME)
+
+$(ADAPTOR_SO_OBJ) : $(BUILD_SO_DIR)/adaptor_%.o : %.c
+	$(CC) -c $(CFLAGS) $(SO_BUILD_CFLAGS) -DFOR_ADAPTOR $< -o $@
+
+$(ADAPTOR_SO_NAME) :  $(ADAPTOR_SO_OBJ)
+	$(CC) $(CFLAGS) $(SO_BUILD_CFLAGS) $(ADAPTOR_SO_OBJ) -DFOR_ADAPTOR\
+    -shared -o $@
+	cat ${ADAPTOR_SO_OBJ:%.o=%.d} > adaptor_so_dep.txt
 
 #####################################################################
 #
@@ -84,38 +90,17 @@ $(SO_OBJ) : $(BUILD_SO_DIR)/%.o : %.c
 #####################################################################
 $(DEMO_NAME) : ${DEMO_SRCS:%.c=%.o} $(AR_NAME)
 	$(CC) $(filter %.o, $+) -L. -Wl,-static -lljmm -Wl,-Bdynamic -o $@
-
-$(UNIT_TEST) : ${UNIT_TEST_SRCS:%.cxx=%.o} $(AR_NAME)
-	$(CXX) $(filter %.o, $+) -L. -Wl,-static -lljmm -Wl,-Bdynamic -o $@
-
-$(RBTREE_TEST) : ${RB_TREE_SRCS:%.c=%.o} ${RB_TEST_SRCS:%.cxx=%.o}
-	$(CXX) $(filter %.o, $+) -o $@
-
+	cat ${DEMO_SRCS:%.c=%.d} > demo_dep.txt
 %.o : %.c
 	$(CC) $(CFLAGS) -c $<
 
 %.o : %.cxx
 	$(CXX) $(CXXFLAGS) -c $<
 
-#####################################################################
-#
-#  		Building testing/benchmark stuff
-#
-#####################################################################
-test : $(RBTREE_TEST) $(UNIT_TEST)
-	@echo "RB-tree unit testing"
-	./$(RBTREE_TEST)
-	@echo ""
-	@echo "Memory management unit testing"
-	./$(UNIT_TEST)
-
-${ADAPTOR_SRCS:%.c=%.o} : %.o :  %.c
-	$(CC) $(CFLAGS) -fvisibility=default -MMD -Wall -fPIC -I. -c $<
-
-$(ADAPTOR) : ${ADAPTOR_SRCS:%.c=%.o}
-	$(CC) $(CFLAGS) -fvisibility=default -shared $(filter %.o, $+) -L. -lljmm -ldl -o $@
-	cat ${ADAPTOR_SRCS:%.c=%.d} > adaptor_dep.txt
-
 clean:
-	rm -f *.o *.d *_dep.txt $(BUILD_AR_DIR)/* $(BUILD_SO_DIR)/*
-	rm -f $(AR_NAME) $(SO_NAME) $(RBTREE_TEST) $(DEMO_NAME) $(ADAPTOR)
+	rm -f *.o *.d *_dep.txt $(BUILD_AR_DIR)/*.[do] $(BUILD_SO_DIR)/*.[od]
+	rm -f $(AR_NAME) $(SO_NAME) $(DEMO_NAME)
+	make -C tests clean
+
+test:
+	make all -C tests

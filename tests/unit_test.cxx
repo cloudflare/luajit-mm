@@ -96,11 +96,11 @@ UNIT_TEST::UNIT_TEST(int test_id, int page_num)
     mm_opt.chunk_sz_in_page = _page_num = page_num;
     mm_opt.enable_block_cache = 0;
 
-    _init_succ = lm_init2(0, &mm_opt);
+    _init_succ = lm_init2(&mm_opt);
     _test_succ = _init_succ ? true : false;
     _page_size = sysconf(_SC_PAGESIZE);
     if (_init_succ) {
-        const lm_status_t* status = lm_get_status();
+        const lm_status_t* status = ljmm_get_status();
         _chunk_base = status->first_page;
         lm_free_status(const_cast<lm_status_t*>(status));
     } else {
@@ -222,7 +222,7 @@ UNIT_TEST::VerifyStatus(blk_info2_t* alloc_blk_v, int alloc_blk_v_len,
     if (!_test_succ)
         return;
 
-    const lm_status_t* status = lm_get_status();
+    const lm_status_t* status = ljmm_get_status();
     if (free_blk_v_len != status->free_blk_num ||
         alloc_blk_v_len != status->alloc_blk_num) {
         _test_succ = false;
@@ -261,6 +261,7 @@ UNIT_TEST::VerifyStatus(blk_info2_t* alloc_blk_v, int alloc_blk_v_len,
 int
 main(int argc, char** argv) {
     fprintf(stdout, "\n>>Mmap unit testing\n");
+#if 0
     // test1
     //
     {
@@ -287,7 +288,7 @@ main(int argc, char** argv) {
         ut.VerifyStatus(alloc_blk, ARRAY_SIZE(alloc_blk),
                         free_blk, ARRAY_SIZE(free_blk));
     }
-
+#endif
     fprintf(stdout, "\n>>Munmap unit testing\n");
 
     // Notation for address.

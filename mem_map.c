@@ -21,7 +21,7 @@ void*
 lm_malloc(size_t sz) {
     errno = 0;
     if (!alloc_info) {
-        lm_init(1);
+        lm_init();
         if (!alloc_info)
             return NULL;
     }
@@ -432,66 +432,60 @@ lm_mmap(void *addr, size_t length, int prot, int flags,
  *
  *****************************************************************************
  */
+static int finalized = 0;
+/* "ignore_alloc_blk != 0": to unmap allocated chunk even if there are some
+ * allocated blocks not yet released.
+ */
+static inline void
+fini_helper(int ignore_alloc_blk) {
+    if (finalized)
+        return;
+
+    int no_alloc_blk = no_alloc_blocks();
+    lm_fini_page_alloc();
+
+    if (no_alloc_blk || ignore_alloc_blk)
+        lm_free_chunk();
+
+    finalized = 1;
+}
+
 void
 lm_fini(void) {
     ENTER_MUTEX;
-
-    lm_fini_page_alloc();
-    lm_free_chunk();
-
+    fini_helper(1);
     LEAVE_MUTEX;
 }
 
-/* The purpose of this variable is to workaround a link problem: If we were
- * directly feeding lm_fini to atexit() in function lm_init(), we would be
- * going to see a complaint like this:
- *
- *  "...relocation R_X86_64_PC32 against protected symbol `lm_fini' can not
- *   be used when making a shared object"...
- *
- *   I think it's perfectly fine using R_X86_64_PC32 as a relocation for
- * the protected symbol lm_fini. It seems like it's GNU ld (I'm using 2.24)
- * problem. Actually gold linker is able to link successfully.
- *
- *   NOTE: This variable must be visible to other modules, otherwise, with
- * higher optimization level, compiler can propagate its initial value (i.e.
- * the lm_fini) to where it's referenced.
- */
-void (*lm_fini_ptr)() __attribute__((visibility("protected"))) = lm_fini;
-
-static inline int
-lm_init_helper(int auto_fini, lj_mm_opt_t* mm_opt) {
-    int res = 1;
-    if (auto_fini != 0) {
-        /* Do not directly feed lm_fini to atexit(), see the comment to
-         * variable "lm_fini_ptr" for why.
-         */
-        res = atexit(lm_fini_ptr);
-
-        /* Negate the sense of 'success' :-) */
-        res = (res == 0) ? 1 : 0;
-    }
-
-    if (res)
-        res = lm_init_page_alloc(lm_alloc_chunk(), mm_opt);
-
-    return res;
+__attribute__((destructor))
+static void
+lm_fini2(void) {
+    /* It is unsafe to unmap the chunk as we are not sure if they are still alive.
+     * We don't need to worry about luajit. However, when we stress-test this lib
+     * with real-world applications, we find there are memory leakage, and at the
+     * time lm_fini2() is called, these allocated blocks are still alive (will be
+     * referenced by exit-handlers.
+     */
+    fini_helper(0);
 }
 
 /* Initialize the allocation, return non-zero on success, 0 otherwise. */
 int
-lm_init(int auto_fini) {
+lm_init(void) {
+    int res;
     ENTER_MUTEX;
-    int res = lm_init_helper(auto_fini, NULL);
+    res = lm_init_page_alloc(lm_alloc_chunk(), NULL);
+    finalized = 0;
     LEAVE_MUTEX;
-
     return res;
 }
 
 int
-lm_init2(int auto_fini, lj_mm_opt_t* mm_opt) {
+lm_init2(lj_mm_opt_t* mm_opt) {
+    int res;
     ENTER_MUTEX;
-    int res = lm_init_helper(auto_fini, mm_opt);
+    res = lm_init_page_alloc(lm_alloc_chunk(), mm_opt);
+    finalized = 0;
     LEAVE_MUTEX;
     return res;
 }

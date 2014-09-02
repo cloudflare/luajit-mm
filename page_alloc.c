@@ -42,7 +42,7 @@ lm_init_page_alloc(lm_chunk_t* chunk, lj_mm_opt_t* mm_opt) {
     int alloc_sz = sizeof(lm_alloc_t) +
                    sizeof(lm_page_t) * (page_num + 1);
 
-    alloc_info = (lm_alloc_t*) malloc(alloc_sz);
+    alloc_info = (lm_alloc_t*) MYMALLOC(alloc_sz);
     if (!alloc_info) {
         errno = ENOMEM;
         return 0;
@@ -125,7 +125,7 @@ lm_fini_page_alloc(void) {
 
         rbt_fini(&alloc_info->alloc_blks);
 
-        free(alloc_info);
+        MYFREE(alloc_info);
         alloc_info = 0;
     }
 
@@ -240,7 +240,7 @@ lm_get_status(void) {
     if (!alloc_info)
         return NULL;
 
-    lm_status_t* s = (lm_status_t *)malloc(sizeof(lm_status_t));
+    lm_status_t* s = (lm_status_t *)MYMALLOC(sizeof(lm_status_t));
     s->first_page = alloc_info->first_page;
     s->page_num = alloc_info->page_num;
     s->idx_to_id = alloc_info->idx_2_id_adj;
@@ -254,7 +254,7 @@ lm_get_status(void) {
     /* Populate allocated block info */
     if (alloc_blk_num) {
         block_info_t* ai;
-        ai = (block_info_t*)malloc(sizeof(block_info_t) * alloc_blk_num);
+        ai = (block_info_t*)MYMALLOC(sizeof(block_info_t) * alloc_blk_num);
 
         rb_iter_t iter, iter_e;
         int idx = 0;
@@ -280,7 +280,7 @@ lm_get_status(void) {
     }
     if (free_blk_num) {
         block_info_t* fi;
-        fi = (block_info_t*)malloc(sizeof(block_info_t) * free_blk_num);
+        fi = (block_info_t*)MYMALLOC(sizeof(block_info_t) * free_blk_num);
 
         int idx = 0;
         int page_size_log2 = alloc_info->page_size_log2;
@@ -313,12 +313,12 @@ lm_free_status(lm_status_t* status) {
         return;
 
     if (status->free_blk_info)
-        free(status->free_blk_info);
+        MYFREE(status->free_blk_info);
 
     if (status->alloc_blk_info)
-        free(status->alloc_blk_info);
+        MYFREE(status->alloc_blk_info);
 
-    free(status);
+    MYFREE(status);
 }
 
 #ifdef DEBUG

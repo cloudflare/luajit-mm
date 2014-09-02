@@ -57,7 +57,8 @@
  *
  *  3. build the ptmalloc3 with:
  *      make -C src/dir linux-shared \
- *  OPT_FLAGS='-O3 -march=native -pthread -Wl,--wrap=mmap -Wl,--wrap=munmap -Wl,--wrap=mremap'
+ *  OPT_FLAGS='-O3 -march=native -pthread -Wl,--wrap=mmap \
+ *          -Wl,--wrap=munmap -Wl,--wrap=mremap'
  *
  *     it will successfuly build libptmalloc3.so, but fail to build t-test1,
  *   which we don't need. The failure is due to undefined symbol of _wrap_xxx()
@@ -68,7 +69,8 @@
  *       the libptmalloc3.so, and will be automatically loaded by the system
  *       dynamic loader.
  *
- *    o. the -Wl,--wrap=xxx is to let linker the replace symbol xxx with __wrap_xxx.
+ *    o. the -Wl,--wrap=xxx is to let linker the replace symbol xxx with
+ *       __wrap_xxx.
  *
  *  4. set LD_LIBRARY_PATH properly to include the path to libljmm.so.
  *
@@ -78,7 +80,8 @@
  *
  * Miscellaneous
  * -------------
- *   Some functionalities can be turned on/off via following environment variables.
+ *   Some functionalities can be turned on/off via following environment
+ *   variables:
  *     - ENABLE_LJMM = {0|1}
  *     - ENABLE_LJMM_TRACE = {0|1}
  */
@@ -112,7 +115,7 @@ static int init_done = 0;
 static int __attribute__((noinline))
 init_adaptor(void) {
     const char* func_name = __FUNCTION__;
-    if (!lm_init(1)) {
+    if (!lm_init()) {
         fprintf(stderr, "%s: fail to call lm_init()\n", func_name);
         return 0;
     }
@@ -152,7 +155,6 @@ __wrap_mmap64(void *addr, size_t length, int prot, int flags,
     const char* func = __FUNCTION__;
     void* blk = NULL;
 
-    fprintf(stderr, "init_done = %d, addr = %p, flags = %d\n", init_done, addr, flags);
     if (init_done && !addr && (flags & (MAP_ANONYMOUS|MAP_ANON))) {
         blk = lm_mmap(addr, length, prot, flags|MAP_32BIT, fd, offset);
         if (unlikely(enable_trace)) {
@@ -204,6 +206,7 @@ __wrap_munmap(void *addr, size_t length) {
 void*
 __wrap_mremap(void *old_addr, size_t old_size, size_t new_size,
               int flags, ...) {
+    fprintf(stderr, "WTF!, remap is called\n");
     if (!init_done || old_addr > (void*)LJMM_AS_UPBOUND) {
         void* p = NULL;
         if (!(flags & MREMAP_FIXED)) {

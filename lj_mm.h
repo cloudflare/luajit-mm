@@ -35,20 +35,22 @@ lm_init_mm_opt(lj_mm_opt_t* opt) {
  * conflicting with applications being benchmarked.
  */
 
-#define lm_init     ljmm_init
-#define lm_init2    ljmm_init2
-#define lm_fini     ljmm_fini
-#define lm_mmap     ljmm_mmap
-#define lm_munmap   ljmm_munmap
-#define lm_mremap   ljmm_mremap
-#define lm_malloc   ljmm_malloc
-#define lm_free     ljmm_free
+#define lm_init         ljmm_init
+#define lm_init2        ljmm_init2
+#define lm_fini         ljmm_fini
+#define lm_mmap         ljmm_mmap
+#define lm_munmap       ljmm_munmap
+#define lm_mremap       ljmm_mremap
+#define lm_malloc       ljmm_malloc
+#define lm_free         ljmm_free
+#define lm_get_status   ljmm_get_status
+#define lm_free_status  ljmm_free_status
 
 /* Inititalize the memory-management system. If auto_fini is set
  * (i.e. auto_fini != 0), there is no need to call lm_fini() at exit.
  */
-int lm_init(int auto_fini) LJMM_EXPORT;
-int lm_init2(int auto_fini, lj_mm_opt_t*) LJMM_EXPORT;
+int lm_init(void) LJMM_EXPORT;
+int lm_init2(lj_mm_opt_t*) LJMM_EXPORT;
 void lm_fini(void) LJMM_EXPORT;
 
 /* Same prototype as mmap(2), and munmap(2) */
@@ -79,8 +81,8 @@ typedef struct {
     block_info_t* alloc_blk_info;
 } lm_status_t;
 
-const lm_status_t* lm_get_status(void);
-void lm_free_status(lm_status_t*);
+const lm_status_t* lm_get_status(void) LJMM_EXPORT;
+void lm_free_status(lm_status_t*) LJMM_EXPORT;
 
 #ifdef DEBUG
 void dump_page_alloc(FILE*) LJMM_EXPORT;
