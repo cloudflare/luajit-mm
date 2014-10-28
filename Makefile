@@ -9,7 +9,7 @@ SO_NAME := libljmm.so
 # For testing and benchmarking, see details in adaptor.c
 ADAPTOR_SO_NAME := libljmm4adaptor.so
 
-OPT_FLAGS = -O3 -g -march=native -DDEBUG
+OPT_FLAGS = -O3 -g -DDEBUG
 CFLAGS = -DENABLE_TESTING -fvisibility=hidden -MMD -Wall $(OPT_FLAGS)
 CXXFLAGS = $(CFLAGS)
 

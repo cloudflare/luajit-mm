@@ -76,7 +76,7 @@ lm_init_page_alloc(lm_chunk_t* chunk, lj_mm_opt_t* mm_opt) {
     /* Determine the max order */
     int max_order = 0;
     unsigned int bitmask;
-    for (bitmask = 0x80000000, max_order = 31;
+    for (bitmask = 0x80000000/*2G*/, max_order = 31;
          bitmask;
          bitmask >>= 1, max_order --) {
         if (bitmask & page_num)
@@ -84,7 +84,7 @@ lm_init_page_alloc(lm_chunk_t* chunk, lj_mm_opt_t* mm_opt) {
     }
     alloc_info->max_order = max_order;
 
-    /* So, the ID of biggest block's first page is "2 * (1<<order)". e.g.
+    /* So, the ID of biggest block's first page is "1 << order". e.g.
      * Suppose the chunk contains 11 pages, which will be divided into 3
      * blocks, eaching containing 1, 2 and 8 pages. The indices of these
      * blocks are 0, 1, 3 respectively, and their IDs are 5, 6, and 8
@@ -132,7 +132,7 @@ lm_fini_page_alloc(void) {
     bc_fini();
 }
 
-/* The extend given the exiting allocated block such that it could accommodate
+/* To extend the given exiting allocated block such that it can accommodate
  * at least new_sz bytes.
  */
 int
@@ -153,7 +153,10 @@ extend_alloc_block(page_idx_t block_idx, size_t new_sz) {
     page_id_t blk_id = page_idx_to_id(block_idx);
     int order = alloc_info->page_info[block_idx].order;
 
-    /* step 1: perfrom dry-run to see if we have luck. */
+    /* step 1: The in-place block extension is done by merging its *following*
+     *  free buddy to a form bigger block. The extension process repeats until
+     *  we find a block bigger enough to accommodate the <new_sz> bytes.
+     */
     int succ = 0;
     int ord;
     for (ord = order; ord <= alloc_info->max_order; ord++) {
@@ -169,17 +172,23 @@ extend_alloc_block(page_idx_t block_idx, size_t new_sz) {
         }
 
         int buddy_idx = page_id_to_idx(buddy_id);
-        if (!rbt_search(&alloc_info->free_blks[ord], buddy_idx, NULL))
+        if (!rbt_search(&alloc_info->free_blks[ord], buddy_idx, NULL)) {
+            /* bail out if the buddy is not available */
             break;
+        }
     }
 
     /* This function is not supposed to shrink the existing block; therefore,
      * if the existing block is big enough to accommodate allocation request,
-     * it need to return 0 to inform the caller something fishy is happening.
+     * it need to return 0 to inform the caller that something fishy is
+     * happening.
      */
     if (!succ || ord == order)
         return 0;
 
+    /* Step 2: The previous step is merely a 'dry-run' of extension. This
+     *  step is to perform real transformation.
+     */
     int t;
     for (t = order; t < ord; t++) {
         page_id_t buddy_id = blk_id ^ (1 << t);
@@ -193,6 +202,9 @@ extend_alloc_block(page_idx_t block_idx, size_t new_sz) {
     return 1;
 }
 
+/* Free the block whose first page (aka block leader) is specified
+ * by "page_idx". return 1 on success and 0 otherwise.
+ */
 int
 free_block(page_idx_t page_idx) {
     (void)remove_alloc_block(page_idx);

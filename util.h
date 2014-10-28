@@ -33,6 +33,22 @@ log2_int32(unsigned num) {
 }
 
 #ifdef FOR_ADAPTOR
+    /* The gist of stress testing/benchmarking is to use widely available
+     * applications, and bind their malloc()s calls to non-glibc
+     * implementation (we use ptmalloc3). The malloc@ptmalloc3 in turn
+     * calls functions of the adpator (test/libadaptor.so), which in turn
+     * call functions of libljmm.so.
+     *
+     * If libljmm.so would directly call malloc(), it would form a call cycle,
+     * and call cycle would quickly exhaust stack space and making app crash.
+     *
+     *  So, the libljmm.so should call another malloc implementation to avoid
+     * call-cycle. We come up a poor-man's implementation in test/mymalloc.
+     *
+     *  Please also note, for exactly the same reason, we should avoid calling
+     * those libcs function which may potentially call malloc(), for instance
+     * dlsym().
+     */
     #define MYMALLOC    __adaptor_malloc
     #define MYFREE      __adaptor_free
     #define MYCALLOC    __adaptor_calloc

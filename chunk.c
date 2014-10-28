@@ -30,15 +30,14 @@ lm_alloc_chunk (void) {
     uintptr_t cur_brk = (uintptr_t)sbrk(0);
     uintptr_t page_sz = sysconf(_SC_PAGESIZE);
 
-    /* The chunk or memory must be page-aligned, and are multiple pages in size.
-     */
+    /* The chunk must be page-aligned, and are multiple pages in size. */
     cur_brk = (page_sz - 1 + cur_brk) & ~(page_sz - 1);
 
     uint avail = LJMM_AS_UPBOUND - ((intptr_t)cur_brk);
     avail = avail & ~(page_sz - 1);
     if (avail < MEM_TOO_SMALL) {
-        /* We can achieve almost nothing with 1MB, might as well bail out. */
-        return 0;
+        /* Bail out as we can achieve almost nothing with 1MB.*/
+        return NULL;
     }
 
     uintptr_t chunk = (uintptr_t)
@@ -48,10 +47,10 @@ lm_alloc_chunk (void) {
     if (chunk == (uintptr_t)MAP_FAILED)
         return NULL;
 
-    /* If the program linked to this lib generates code-dump, do not dump those
+    /* If the program linked to this lib generates core-dump, do not dump those
      * portions which are not allocated at all.
      */
-    madvise((void*)chunk, avail, MADV_DONTNEED|MADV_DONTDUMP);
+    madvise((void*)chunk, avail, MADV_DONTNEED | MADV_DONTDUMP);
 
     big_chunk.base = (char*)chunk;
     big_chunk.start = (char*)chunk;
