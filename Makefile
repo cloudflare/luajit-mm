@@ -6,6 +6,9 @@ default : all
 AR_NAME := libljmm.a
 SO_NAME := libljmm.so
 
+OBJ_COMBINED := ljmm-combined.o
+OBJ_COMBINED_PIC := ljmm-combined_dyn.o
+
 # For testing and benchmarking, see details in adaptor.c
 ADAPTOR_SO_NAME := libljmm4adaptor.so
 
@@ -42,7 +45,7 @@ DEMO_SRCS = demo.c
 
 # Highest level dependency
 all: $(AR_NAME) $(SO_NAME) $(ADAPTOR_SO_NAME) $(RBTREE_TEST) \
-      $(DEMO_NAME) $(UNIT_TEST)
+      $(DEMO_NAME) $(UNIT_TEST) $(OBJ_COMBINED) $(OBJ_COMBINED_PIC)
 
 test $(DEMO_NAME): $(AR_NAME) $(SO_NAME) $(SO_4_ADAPTOR_NAME)
 
@@ -57,8 +60,9 @@ test $(DEMO_NAME): $(AR_NAME) $(SO_NAME) $(SO_4_ADAPTOR_NAME)
 #
 #####################################################################
 #
-$(AR_NAME) : $(AR_OBJ)
+$(AR_NAME) $(OBJ_COMBINED) : $(AR_OBJ)
 	$(AR) cru $@ $(AR_OBJ)
+	ld -r $(AR_OBJ) -o $(OBJ_COMBINED)
 	cat $(BUILD_AR_DIR)/*.d > ar_dep.txt
 
 $(AR_OBJ) : $(BUILD_AR_DIR)/%.o : %.c
@@ -72,8 +76,9 @@ $(AR_OBJ) : $(BUILD_AR_DIR)/%.o : %.c
 $(SO_OBJ) : $(BUILD_SO_DIR)/%.o : %.c
 	$(CC) -c $(CFLAGS) $(SO_BUILD_CFLAGS) $< -o $@
 
-$(SO_NAME) : $(SO_OBJ)
+$(SO_NAME) $(OBJ_COMBINED_PIC): $(SO_OBJ)
 	$(CC) $(CFLAGS) $(SO_BUILD_CFLAGS) $(SO_OBJ) -shared -o $(SO_NAME)
+	ld -r $(SO_OBJ) -o $(OBJ_COMBINED_PIC)
 
 $(ADAPTOR_SO_OBJ) : $(BUILD_SO_DIR)/adaptor_%.o : %.c
 	$(CC) -c $(CFLAGS) $(SO_BUILD_CFLAGS) -DFOR_ADAPTOR $< -o $@
