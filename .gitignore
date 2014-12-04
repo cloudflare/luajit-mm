@@ -1,0 +1,10 @@
+*.d
+*.o
+*.so
+*.a
+demo
+.gdb_history
+tags
+*_dep.txt
+tests/rbt_test
+tests/unit_test
