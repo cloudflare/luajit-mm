@@ -432,7 +432,7 @@ lm_mmap(void *addr, size_t length, int prot, int flags,
  *
  *****************************************************************************
  */
-static int finalized = 0;
+static int finalized = 1;
 /* "ignore_alloc_blk != 0": to unmap allocated chunk even if there are some
  * allocated blocks not yet released.
  */
