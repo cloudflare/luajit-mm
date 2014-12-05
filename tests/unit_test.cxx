@@ -62,7 +62,7 @@ public:
 
     // Munmap [first-page : first + page_num * page-size + fraction].
     bool Munmap(const MemExt&);
-    bool Mremap(const MemExt& old, const MemExt& new_ext);
+    bool Mremap(const MemExt& old, const MemExt& new_ext, bool maymove=true);
 
 private:
     void Transfer_Block_Info(vector<block_info_t>& to,
@@ -183,13 +183,13 @@ UNIT_TEST::Munmap(const MemExt& mem_ext) {
 }
 
 bool
-UNIT_TEST::Mremap(const MemExt& old, const MemExt& new_one) {
+UNIT_TEST::Mremap(const MemExt& old, const MemExt& new_one, bool maymove) {
     if (!_init_succ || !_test_succ)
         return false;
 
     void* r;
     r = lm_mremap(old.getStartAddr(), old.getLen(), new_one.getLen(),
-                  MREMAP_MAYMOVE);
+                  maymove ? MREMAP_MAYMOVE : 0);
 
     _test_succ = (r != MAP_FAILED);
     return _test_succ;
@@ -261,7 +261,6 @@ UNIT_TEST::VerifyStatus(blk_info2_t* alloc_blk_v, int alloc_blk_v_len,
 int
 main(int argc, char** argv) {
     fprintf(stdout, "\n>>Mmap unit testing\n");
-#if 0
     // test1
     //
     {
@@ -288,7 +287,6 @@ main(int argc, char** argv) {
         ut.VerifyStatus(alloc_blk, ARRAY_SIZE(alloc_blk),
                         free_blk, ARRAY_SIZE(free_blk));
     }
-#endif
     fprintf(stdout, "\n>>Munmap unit testing\n");
 
     // Notation for address.
@@ -330,7 +328,7 @@ main(int argc, char** argv) {
 
     fprintf(stdout, "\n>>Remap unit testing\n");
 
-    // Test1:
+    // Test1: remap, expand in place
     {
         // allocate 16-page chunk, then allocate 2 pages, then expand allocated
         // block to 7 pages.
@@ -346,23 +344,42 @@ main(int argc, char** argv) {
                         free_blk, ARRAY_SIZE(free_blk));
     }
 
-    // Test2:
+    // Test2: remap, expand and move
     {
         // similar to the test1, except that it's not able to expand the
         // allocated by merge free buddy blocks. It needs to allocate a new
         // blocks, and copy the original content to the new one.
         //
         UNIT_TEST ut(2, 16);
-        ut.Mmap(MemExt(ut, 1, 123)); // allocate one-page + 123-byte.
-        ut.Mmap(MemExt(ut, 2, 456)); // allocate two-page + 456-byte.
 
-        // expand to 6-page + 234 bytes.
+        ut.Mmap(MemExt(ut, 1, 123)); // allocate a block (blk1) w/ one-page + 123-byte.
+        ut.Mmap(MemExt(ut, 2, 456)); // allocate a block (blk2) w/ two-page + 456-byte.
+        // So the blk1 extends [page0..page1], while the blk2 extends [page4 .. page6]
+
+        // blk1 relocate to [page8 .. page13] ut.Mremap(MemExt(ut, 1, 123, 0), MemExt(ut, 6, 234));
         ut.Mremap(MemExt(ut, 1, 123, 0), MemExt(ut, 6, 234));
 
-        blk_info2_t alloc_blk[] = { {8, 3, 6, 234}, {4, 2, 2, 456} };
-        blk_info2_t free_blk[] = { {0, 2, 4, 0} };
+        blk_info2_t alloc_blk[] = { {8, 3, 6, 234}/*blk1*/, {4, 2, 2, 456} /* blk2*/ };
+        blk_info2_t free_blk[] = { {0, 2, 4, 0}};
         ut.VerifyStatus(alloc_blk, ARRAY_SIZE(alloc_blk),
                         free_blk, ARRAY_SIZE(free_blk));
     }
+
+    // Test 3: remap, shrink
+    {
+        UNIT_TEST ut(3, 16);
+
+        ut.Mmap(MemExt(ut, 1, 123)); // allocate a block (blk1) w/ one-page + 123-byte.
+        ut.Mmap(MemExt(ut, 2, 456)); // allocate a block (blk2) w/ two-page + 456-byte.
+
+        // shrink the blk2 from 2*page+456-byte to 1*page + 12 bytes
+        ut.Mremap(MemExt(ut, 2, 456, 4), MemExt(ut, 1, 12, 4));
+
+        blk_info2_t alloc_blk[] = { {0, 1, 1, 123}/*blk1*/, {4, 1, 1, 12} /* blk2*/ };
+        blk_info2_t free_blk[] = { {2, 1, 2, 0} /* blk1's buddy */, {6, 1, 2, 0}, {8, 3, 8, 0}};
+        ut.VerifyStatus(alloc_blk, ARRAY_SIZE(alloc_blk),
+                        free_blk, ARRAY_SIZE(free_blk));
+    }
+
     return fail_num == 0 ? 0 : -1;
 }
