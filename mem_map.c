@@ -149,8 +149,7 @@ lm_mremap_helper(void* old_addr, size_t old_size, size_t new_size, int flags) {
      *      mapping pages.
      */
     if (old_page_num > new_page_num) {
-        char* unmap_start = (char*)alloc_info->first_page +
-                            (new_page_num << page_sz_log2);
+        char* unmap_start = old_addr + (new_page_num << page_sz_log2);
         size_t unmap_len = old_size - (((size_t)new_page_num) << page_sz_log2);
         if (lm_unmap_helper(unmap_start, unmap_len)) {
             rbt_set_value(rbt, page_idx, new_size);
@@ -195,7 +194,8 @@ lm_mremap_helper(void* old_addr, size_t old_size, size_t new_size, int flags) {
     ASSERT(old_page_num == new_page_num);
     rbt_set_value(&alloc_info->alloc_blks, page_idx, new_size);
 
-    return old_addr; }
+    return old_addr;
+}
 
 void*
 lm_mremap(void* old_addr, size_t old_size, size_t new_size, int flags) {
