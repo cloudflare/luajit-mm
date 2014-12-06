@@ -1,8 +1,6 @@
 #ifndef _BLOCK_CACHE_H_
 #define _BLOCK_CACHE_H_
 
-#include "ljmm_conf.h"
-
 struct blk_lru;
 typedef struct blk_lru blk_lru_t;
 

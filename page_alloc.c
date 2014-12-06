@@ -15,7 +15,7 @@ lm_alloc_t* alloc_info = NULL;
 
 /* Initialize the page allocator, return 1 on success, 0 otherwise. */
 int
-lm_init_page_alloc(lm_chunk_t* chunk, lj_mm_opt_t* mm_opt) {
+lm_init_page_alloc(lm_chunk_t* chunk, ljmm_opt_t* mm_opt) {
     if (!chunk) {
         /* Trunk is not yet allocated */
         return 0;
@@ -28,7 +28,7 @@ lm_init_page_alloc(lm_chunk_t* chunk, lj_mm_opt_t* mm_opt) {
 
     int page_num = chunk->page_num;
     if (unlikely(mm_opt != NULL)) {
-        int pn = mm_opt->chunk_sz_in_page;
+        int pn = mm_opt->dbg_alloc_page_num;
         if (((pn > 0) && (pn > page_num)) || !pn)
             return 0;
         page_num = pn;
@@ -48,7 +48,7 @@ lm_init_page_alloc(lm_chunk_t* chunk, lj_mm_opt_t* mm_opt) {
         return 0;
     }
 
-    alloc_info->first_page = chunk->start;
+    alloc_info->first_page = chunk->base;
     alloc_info->page_num   = page_num;
     alloc_info->page_size  = chunk->page_size;
     alloc_info->page_size_log2 = log2_int32(chunk->page_size);

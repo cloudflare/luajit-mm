@@ -8,33 +8,46 @@
 extern "C" {
 #endif
 
-#ifdef BUILDING_LIB
-    #define LJMM_EXPORT __attribute__ ((visibility ("protected")))
-#else
-    #define LJMM_EXPORT __attribute__ ((visibility ("default")))
-#endif
+typedef enum {
+    /* lm_mmap() is done exclusively by the user mode mmap. */
+    lm_user_mode = 0,
 
-/* The options for memory-management. Currently, it's only for debugging
- * and testing purpose.
- */
+    /* lm_mmap() is done exclusively by the mmap(2). */
+    lm_sys_mode = 1,
+
+    /* lm_mmap() attempts user-mode mmap first, then mmap(2). */
+    lm_prefer_user = 2,
+
+    /* lm_mmap attemps mmap(2) first. If it was not succesful,
+     * attempt user-mode mmap
+     */
+    lm_prefer_sys = 3,
+
+    lm_default = lm_user_mode
+} ljmm_mode_t;
+
+/* Additional options, primiarilly for debugging purpose */
 typedef struct {
-    int chunk_sz_in_page;   /* "< 0" : default behavior */
-    int enable_block_cache; /* 0 : disable, 1: enable */
-    int blk_cache_in_page;  /* "< 0": use default value */
-} lj_mm_opt_t;
+    ljmm_mode_t mode;
 
-/* Populate lj_mm_opt_t with default value */
-static inline void
-lm_init_mm_opt(lj_mm_opt_t* opt) {
-    opt->chunk_sz_in_page = -1;
-    opt->enable_block_cache = 1;
-    opt->blk_cache_in_page = -1;
-}
+    /* For debugging/testing purpose only. It is ask page-allocator to
+     * allocate as many pages as the dbg_alloc_page_num specfies. The
+     * nubmer is usually very small, say 8, 12, which make it very easy
+     * to check the status after each opeator.
+     *
+     * Negative value means default value.
+     */
+    int dbg_alloc_page_num;
+
+    /* Tweak block-cache, currently not enabled */
+    int enable_block_cache;
+    int blk_cache_in_page;
+} ljmm_opt_t;
 
 /* All exported symbols are prefixed with ljmm_ to reduce the chance of
  * conflicting with applications being benchmarked.
  */
-
+#define lm_init_mm_opt  ljmm_init_mm_opt
 #define lm_init         ljmm_init
 #define lm_init2        ljmm_init2
 #define lm_fini         ljmm_fini
@@ -46,11 +59,18 @@ lm_init_mm_opt(lj_mm_opt_t* opt) {
 #define lm_get_status   ljmm_get_status
 #define lm_free_status  ljmm_free_status
 
-/* Inititalize the memory-management system. If auto_fini is set
- * (i.e. auto_fini != 0), there is no need to call lm_fini() at exit.
- */
+#ifdef BUILDING_LIB
+    #define LJMM_EXPORT __attribute__ ((visibility ("protected")))
+#else
+    #define LJMM_EXPORT __attribute__ ((visibility ("default")))
+#endif
+
+/* Populate ljmm_opt_t with default value */
+void lm_init_mm_opt(ljmm_opt_t* opt) LJMM_EXPORT;
+
+/* Inititalize the memory-management system. */
 int lm_init(void) LJMM_EXPORT;
-int lm_init2(lj_mm_opt_t*) LJMM_EXPORT;
+int lm_init2(ljmm_opt_t*) LJMM_EXPORT;
 void lm_fini(void) LJMM_EXPORT;
 
 /* Same prototype as mmap(2), and munmap(2) */

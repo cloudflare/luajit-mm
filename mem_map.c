@@ -14,6 +14,16 @@
 /* Forward Decl */
 static int lm_unmap_helper(void* addr, size_t um_size);
 
+static ljmm_mode_t ljmm_mode = lm_default;
+
+void
+lm_init_mm_opt(ljmm_opt_t* opt) {
+    opt->mode = lm_default;
+    opt->dbg_alloc_page_num = -1;
+    opt->enable_block_cache = 0;
+    opt->blk_cache_in_page = 0;
+}
+
 /* For allocating "big" blocks (about one page in size, or across multiple
  * pages). The return value is page-aligned.
  */
@@ -199,11 +209,11 @@ lm_mremap_helper(void* old_addr, size_t old_size, size_t new_size, int flags) {
 
 void*
 lm_mremap(void* old_addr, size_t old_size, size_t new_size, int flags) {
-    void* res = NULL;
-    ENTER_MUTEX;
-    res = lm_mremap_helper(old_addr, old_size, new_size, flags);
-    LEAVE_MUTEX;
+    if (!lm_in_chunk_range(old_addr)) {
+        return mremap(old_addr, old_size, new_size, flags);
+    }
 
+    void* res = lm_mremap_helper(old_addr, old_size, new_size, flags);
     return res ? res : MAP_FAILED;
 }
 
@@ -376,26 +386,31 @@ lm_unmap_helper(void* addr, size_t um_size) {
 
 int
 lm_munmap(void* addr, size_t length) {
-    int page_sz = alloc_info->page_size;
-    int retval = 0;
+    /* Step 1: see if the addr is allocated via mmap(2). If so, we need to
+     *  unmap it with munmap(2).
+     */
+    if (!lm_in_chunk_range(addr)) {
+        if (ljmm_mode != lm_user_mode)
+            return munmap(addr, length); 
 
-    ENTER_MUTEX;
-    {
-        /* The <addr> must be aligned at page boundary */
-        if (!length || (((uintptr_t)addr) & (page_sz - 1))) {
-            errno = EINVAL;
-            retval = -1;
-        } else {
-            retval = lm_unmap_helper(addr, length);
-            if (!retval)
-                errno = EINVAL;
-            /* negate the sense of succ. */
-            retval = retval ? 0 : -1;
-        }
+        errno = EINVAL;
+        return -1;
     }
-    LEAVE_MUTEX;
 
-    return retval;
+    /* Step 2: unmap the block with the "user-mode" munmap */
+
+    /* The <addr> must be aligned at page boundary */
+    int page_sz = alloc_info->page_size;
+    if (!length || (((uintptr_t)addr) & (page_sz - 1))) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    if (lm_unmap_helper(addr, length))
+        return 0;
+
+    errno = EINVAL;
+    return -1;
 }
 
 /*****************************************************************************
@@ -407,22 +422,24 @@ lm_munmap(void* addr, size_t length) {
 void*
 lm_mmap(void *addr, size_t length, int prot, int flags,
          int fd, off_t offset) {
-    void *p = NULL;
 
-    ENTER_MUTEX;
-    {
-        if (addr /* we completely ignore hint */ ||
-            fd != -1 /* Only support anonymous mapp */ ||
-            !(flags & MAP_32BIT) /* Otherwise, directly use mmap(2) */ ||
-            !length ||
-            (flags & MAP_FIXED) /* not suppoted*/) {
-            errno = EINVAL;
-        } else {
-            p = lm_malloc(length);
-        }
+    if (addr /* we completely ignore hint */ ||
+        fd != -1 /* Only support anonymous mapp */ ||
+        !(flags & MAP_32BIT) /* Otherwise, directly use mmap(2) */ ||
+        !length ||
+        (flags & MAP_FIXED) /* not suppoted*/) {
+        errno = EINVAL;
+        return MAP_FAILED;
     }
-    LEAVE_MUTEX;
 
+    void *p = NULL;
+    if (ljmm_mode == lm_prefer_sys || ljmm_mode == lm_sys_mode) {
+        p = mmap(addr, length, prot, flags, fd, offset);
+        if (p != MAP_FAILED || ljmm_mode == lm_sys_mode)
+            return p;
+    }
+
+    p = lm_malloc(length);
     return p ? p : MAP_FAILED;
 }
 
@@ -433,6 +450,7 @@ lm_mmap(void *addr, size_t length, int prot, int flags,
  *****************************************************************************
  */
 static int finalized = 1;
+
 /* "ignore_alloc_blk != 0": to unmap allocated chunk even if there are some
  * allocated blocks not yet released.
  */
@@ -452,9 +470,7 @@ fini_helper(int ignore_alloc_blk) {
 
 void
 lm_fini(void) {
-    ENTER_MUTEX;
     fini_helper(1);
-    LEAVE_MUTEX;
 }
 
 __attribute__((destructor))
@@ -469,23 +485,25 @@ lm_fini2(void) {
     fini_helper(0);
 }
 
-/* Initialize the allocation, return non-zero on success, 0 otherwise. */
 int
-lm_init(void) {
-    int res;
-    ENTER_MUTEX;
-    res = lm_init_page_alloc(lm_alloc_chunk(), NULL);
-    finalized = 0;
-    LEAVE_MUTEX;
-    return res;
+lm_init2(ljmm_opt_t* opt) {
+    lm_chunk_t* chunk;
+    if ((chunk = lm_alloc_chunk(ljmm_mode))) {
+        if (lm_init_page_alloc(chunk, opt)) {
+            finalized = 0;
+            return 1;
+        }
+    } else {
+        /* Look like we run out of (0, 1 GB] space, we have to resort
+         * to mmap(2).
+         */
+        ljmm_mode = lm_sys_mode;
+    }
+
+    return 0;
 }
 
 int
-lm_init2(lj_mm_opt_t* mm_opt) {
-    int res;
-    ENTER_MUTEX;
-    res = lm_init_page_alloc(lm_alloc_chunk(), mm_opt);
-    finalized = 0;
-    LEAVE_MUTEX;
-    return res;
+lm_init(void) {
+    return lm_init2(NULL);
 }

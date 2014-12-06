@@ -116,7 +116,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <malloc.h>
-#include "ljmm_conf.h"
 #include "lj_mm.h"
 #include "util.h"
 

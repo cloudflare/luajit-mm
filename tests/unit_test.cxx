@@ -91,10 +91,11 @@ MemExt::getStartAddr() const {
 
 UNIT_TEST::UNIT_TEST(int test_id, int page_num)
     : _test_id(test_id) {
-    lj_mm_opt_t mm_opt;
+    ljmm_opt_t mm_opt;
+
     lm_init_mm_opt(&mm_opt);
-    mm_opt.chunk_sz_in_page = _page_num = page_num;
-    mm_opt.enable_block_cache = 0;
+    mm_opt.dbg_alloc_page_num = _page_num = page_num;
+    mm_opt.mode = lm_user_mode;
 
     _init_succ = lm_init2(&mm_opt);
     _test_succ = _init_succ ? true : false;
