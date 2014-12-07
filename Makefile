@@ -61,7 +61,7 @@ test $(DEMO_NAME): $(AR_NAME) $(SO_NAME) $(SO_4_ADAPTOR_NAME)
 #####################################################################
 #
 $(AR_NAME) $(OBJ_COMBINED) : $(AR_OBJ)
-	$(AR) cru $@ $(AR_OBJ)
+	$(AR) cru $(AR_NAME) $(AR_OBJ)
 	ld -r $(AR_OBJ) -o $(OBJ_COMBINED)
 	cat $(BUILD_AR_DIR)/*.d > ar_dep.txt
 
