@@ -13,7 +13,7 @@
 
 #define SIZE_1MB ((uint)0x100000)
 #define SIZE_1GB ((uint)0x40000000)
-#define SIZE_2GB ((uint)0x40000000)
+#define SIZE_2GB ((uint)0x80000000)
 
 /* If we end up allocating a chunk no larger than this size, we might as well
  * pull the plug, and give up for good.
