@@ -391,7 +391,7 @@ lm_munmap(void* addr, size_t length) {
      */
     if (!lm_in_chunk_range(addr)) {
         if (ljmm_mode != lm_user_mode)
-            return munmap(addr, length); 
+            return munmap(addr, length);
 
         errno = EINVAL;
         return -1;
