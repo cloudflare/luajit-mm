@@ -32,7 +32,7 @@ lm_alloc_chunk (ljmm_mode_t mode) {
 
     /* The chunk must be page-aligned, and are multiple pages in size. */
     cur_brk = (page_sz - 1 + cur_brk) & ~(page_sz - 1);
-    uintptr_t upbound = (mode == lm_user_mode) ? SIZE_2GB : SIZE_1GB;
+    uintptr_t upbound = (mode == LM_USER_MODE) ? SIZE_2GB : SIZE_1GB;
     if (cur_brk >= upbound)
         return NULL;
 

@@ -14,11 +14,11 @@
 /* Forward Decl */
 static int lm_unmap_helper(void* addr, size_t um_size);
 
-static ljmm_mode_t ljmm_mode = lm_default;
+static ljmm_mode_t ljmm_mode = LM_DEFAULT;
 
 void
 lm_init_mm_opt(ljmm_opt_t* opt) {
-    opt->mode = lm_default;
+    opt->mode = LM_DEFAULT;
     opt->dbg_alloc_page_num = -1;
     opt->enable_block_cache = 0;
     opt->blk_cache_in_page = 0;
@@ -390,7 +390,7 @@ lm_munmap(void* addr, size_t length) {
      *  unmap it with munmap(2).
      */
     if (!lm_in_chunk_range(addr)) {
-        if (ljmm_mode != lm_user_mode)
+        if (ljmm_mode != LM_USER_MODE)
             return munmap(addr, length);
 
         errno = EINVAL;
@@ -433,9 +433,9 @@ lm_mmap(void *addr, size_t length, int prot, int flags,
     }
 
     void *p = NULL;
-    if (ljmm_mode == lm_prefer_sys || ljmm_mode == lm_sys_mode) {
+    if (ljmm_mode == LM_PREFER_SYS || ljmm_mode == LM_SYS_MODE) {
         p = mmap(addr, length, prot, flags, fd, offset);
-        if (p != MAP_FAILED || ljmm_mode == lm_sys_mode)
+        if (p != MAP_FAILED || ljmm_mode == LM_SYS_MODE)
             return p;
     }
 
@@ -497,7 +497,7 @@ lm_init2(ljmm_opt_t* opt) {
         /* Look like we run out of (0, 1 GB] space, we have to resort
          * to mmap(2).
          */
-        ljmm_mode = lm_sys_mode;
+        ljmm_mode = LM_SYS_MODE;
     }
 
     return 0;

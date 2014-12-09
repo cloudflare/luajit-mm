@@ -10,20 +10,20 @@ extern "C" {
 
 typedef enum {
     /* lm_mmap() is done exclusively by the user mode mmap. */
-    lm_user_mode = 0,
+    LM_USER_MODE = 0,
 
     /* lm_mmap() is done exclusively by the mmap(2). */
-    lm_sys_mode = 1,
+    LM_SYS_MODE = 1,
 
     /* lm_mmap() attempts user-mode mmap first, then mmap(2). */
-    lm_prefer_user = 2,
+    LM_PREFER_USER = 2,
 
     /* lm_mmap attemps mmap(2) first. If it was not succesful,
      * attempt user-mode mmap
      */
-    lm_prefer_sys = 3,
+    LM_PREFER_SYS = 3,
 
-    lm_default = lm_user_mode
+    LM_DEFAULT = LM_USER_MODE
 } ljmm_mode_t;
 
 /* Additional options, primiarilly for debugging purpose */

@@ -95,7 +95,7 @@ UNIT_TEST::UNIT_TEST(int test_id, int page_num)
 
     lm_init_mm_opt(&mm_opt);
     mm_opt.dbg_alloc_page_num = _page_num = page_num;
-    mm_opt.mode = lm_user_mode;
+    mm_opt.mode = LM_USER_MODE;
 
     _init_succ = lm_init2(&mm_opt);
     _test_succ = _init_succ ? true : false;
