@@ -31,7 +31,9 @@ lm_init_page_alloc(lm_chunk_t* chunk, ljmm_opt_t* mm_opt) {
         int pn = mm_opt->dbg_alloc_page_num;
         if (((pn > 0) && (pn > page_num)) || !pn)
             return 0;
-        page_num = pn;
+        else if (pn > 0) {
+            page_num = pn;
+        }
 
         if (!bc_set_parameter(mm_opt->enable_block_cache,
                               mm_opt->blk_cache_in_page)) {

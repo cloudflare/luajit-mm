@@ -3,6 +3,7 @@
 #endif
 #include <sys/mman.h>
 
+#include <stdint.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
@@ -259,8 +260,8 @@ UNIT_TEST::VerifyStatus(blk_info2_t* alloc_blk_v, int alloc_blk_v_len,
     lm_free_status(const_cast<lm_status_t*>(status));
 }
 
-int
-main(int argc, char** argv) {
+static bool
+test_page_alloc() {
     fprintf(stdout, "\n>>Mmap unit testing\n");
     // test1
     //
@@ -382,5 +383,81 @@ main(int argc, char** argv) {
                         free_blk, ARRAY_SIZE(free_blk));
     }
 
-    return fail_num == 0 ? 0 : -1;
+    return fail_num == 0;
+}
+
+
+#define ONE_M (1024*1024)
+#define ONE_G (1024*1024*1024)
+
+static bool
+alloc_1M_blocks (int blk_num, vector<void*>& result) {
+    for (int i = 0; i < blk_num; i++) {
+        void* p = lm_mmap(NULL, ONE_M,
+                          PROT_READ|PROT_WRITE,
+                          MAP_32BIT|MAP_PRIVATE|MAP_ANONYMOUS,
+                          -1, 0);
+        if (p != MAP_FAILED) {
+            result.push_back(p);
+        } else {
+            perror("mmap");
+            fprintf(stderr, "fail to allocate no.%d block", i);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+//  This testing case is to make sure in system mode, lm_mmap() is
+//  actually allocate blocks from [1G - 2G] space.
+//
+static bool
+test_sys_mode1() {
+    fprintf(stderr, "System mode testing ... ");
+
+    ljmm_opt_t mm_opt;
+    lm_init_mm_opt(&mm_opt);
+    mm_opt.mode = LM_SYS_MODE;
+
+    if (!lm_init2(&mm_opt)) {
+        fprintf(stderr, "fail to call lm_init2()\n");
+        return false;
+    }
+
+    vector<void*> blks;
+    bool fail = !alloc_1M_blocks(1000, blks);
+
+    int i = 0;
+    for (vector<void*>::iterator iter = blks.begin(), iter_e = blks.end();
+         iter != iter_e; ++iter, i++) {
+        void* p = *iter;
+        if (uintptr_t(p) < ONE_G) {
+            fail = true;
+            fprintf(stderr,
+                    "no.%d block (%p) is not in the range of [1G .. 2G]\n",
+                    i, p);
+        }
+
+        int ret = lm_munmap(p, ONE_M);
+        if (ret != 0) {
+            fail = true;
+            fprintf(stderr, "fail to de-allocate no.%d block", i);
+        }
+    }
+
+    lm_fini();
+
+    fprintf(stderr, "%s\n", fail ? "fail" : "succ");
+    return !fail;
+}
+
+static bool
+test_mode() {
+    return test_sys_mode1();
+}
+
+int
+main(int argc, char** argv) {
+    return test_page_alloc() && test_mode() ? 0 : 1;
 }

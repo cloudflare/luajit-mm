@@ -488,8 +488,9 @@ lm_fini2(void) {
 int
 lm_init2(ljmm_opt_t* opt) {
     lm_chunk_t* chunk;
-    if ((chunk = lm_alloc_chunk(ljmm_mode))) {
+    if ((chunk = lm_alloc_chunk(opt->mode))) {
         if (lm_init_page_alloc(chunk, opt)) {
+            ljmm_mode = opt->mode;
             finalized = 0;
             return 1;
         }
