@@ -390,10 +390,11 @@ test_page_alloc() {
 #define ONE_M (1024*1024)
 #define ONE_G (1024*1024*1024)
 
+
 static bool
-alloc_1M_blocks (int blk_num, vector<void*>& result) {
+alloc_blocks (int blk_num, vector<void*>& result, int blk_sz) {
     for (int i = 0; i < blk_num; i++) {
-        void* p = lm_mmap(NULL, ONE_M,
+        void* p = lm_mmap(NULL, blk_sz,
                           PROT_READ|PROT_WRITE,
                           MAP_32BIT|MAP_PRIVATE|MAP_ANONYMOUS,
                           -1, 0);
@@ -409,21 +410,34 @@ alloc_1M_blocks (int blk_num, vector<void*>& result) {
     return true;
 }
 
-//  This testing case is to make sure in system mode, lm_mmap() is
-//  actually allocate blocks from [1G - 2G] space.
-//
 static bool
-test_sys_mode1() {
-    fprintf(stderr, "System mode testing ... ");
+alloc_1M_blocks (int blk_num, vector<void*>& result) {
+    return alloc_blocks(blk_num, result, ONE_M);
+}
 
+static bool
+init_ljmm(ljmm_mode_t mode) {
     ljmm_opt_t mm_opt;
     lm_init_mm_opt(&mm_opt);
-    mm_opt.mode = LM_SYS_MODE;
+    mm_opt.mode = mode;
 
     if (!lm_init2(&mm_opt)) {
         fprintf(stderr, "fail to call lm_init2()\n");
         return false;
     }
+
+    return true;
+}
+
+//  This testing case is to make sure in system mode, lm_mmap() is
+//  actually allocate blocks from [1G - 2G] space.
+//
+static bool
+test_sys_mode1() {
+    fprintf(stderr, "System mode testing 1... ");
+
+    if (!init_ljmm(LM_SYS_MODE))
+        return false;
 
     vector<void*> blks;
     bool fail = !alloc_1M_blocks(1000, blks);
@@ -452,12 +466,128 @@ test_sys_mode1() {
     return !fail;
 }
 
+/* Try to allocate 1025 blocks, each 1M in size. The first about 1000 blocks
+ * should reside in [1G, 2G] space, while last few blocks should be in
+ * (0, 1G] space.
+ */
+static bool
+test_hybrid_mode1() {
+    fprintf(stderr, "Hybrid mode (prefer sys mode) testing 1... ");
+
+    if (!init_ljmm(LM_PREFER_SYS))
+        return false;
+
+    vector<void*> blks;
+    bool fail = !alloc_1M_blocks(1025, blks);
+
+    int i = 0;
+    int above_1g_cnt = 0;
+    int bellow_1g_cnt = 0;
+    for (vector<void*>::iterator iter = blks.begin(), iter_e = blks.end();
+         iter != iter_e; ++iter, i++) {
+
+        void* p = *iter;
+        if (uintptr_t(p) < ONE_G) {
+            if (above_1g_cnt < 1000) {
+                fail = true;
+                fprintf(stderr,
+                        "no.%d block (%p) is supposed to be in "
+                        "range of [1G .. 2G]",
+                        i, p);
+            }
+            bellow_1g_cnt ++;
+        } else {
+            above_1g_cnt++;
+        }
+
+        int ret = lm_munmap(p, ONE_M);
+        if (ret != 0) {
+            fail = true;
+            fprintf(stderr, "fail to de-allocate no.%d block", i);
+        }
+    }
+
+    lm_fini();
+
+    fprintf(stderr, "%s\n", fail ? "fail" : "succ");
+    return !fail;
+}
+
+static bool
+test_user_mode1() {
+    fprintf(stderr, "User mode testing 1... ");
+
+    if (!init_ljmm(LM_USER_MODE))
+        return false;
+
+    bool fail = false;
+    const lm_status_t* status = ljmm_get_status();
+    int page_num = status->page_num;
+    int page_size = sysconf(_SC_PAGESIZE);
+
+    if (page_num * page_size < ((ONE_G / 2) * 3)) {
+        fail = true;
+    }
+
+    if (!fail) {
+        vector<void*> blks;
+        fail = !alloc_blocks(page_num, blks, sysconf(_SC_PAGESIZE));
+
+        int i = 0;
+        for (vector<void*>::iterator iter = blks.begin(), iter_e = blks.end();
+             iter != iter_e; ++iter, i++) {
+
+            void* p = *iter;
+            int ret = lm_munmap(p, page_size);
+            if (ret != 0) {
+                fail = true;
+                fprintf(stderr, "fail to de-allocate no.%d block\n", i);
+            }
+        }
+    }
+
+    lm_fini();
+
+    fprintf(stderr, "%s\n", fail ? "fail" : "succ");
+    return !fail;
+}
+
 static bool
 test_mode() {
-    return test_sys_mode1();
+    return test_sys_mode1() &&
+           test_hybrid_mode1() &&
+           test_user_mode1();
+}
+
+// Test if we still work properly if the lm_init*() is not explictly called.
+static bool
+test_lazy_init() {
+    fprintf(stderr, "Test calling ljmm_init() lazily ... ");
+
+    vector<void*> blks;
+    bool fail = !alloc_1M_blocks(1025, blks);
+
+    int i = 0;
+    for (vector<void*>::iterator iter = blks.begin(), iter_e = blks.end();
+         iter != iter_e; ++iter, i++) {
+        int ret = lm_munmap(*iter, ONE_M);
+        if (ret != 0) {
+            fail = true;
+            fprintf(stderr, "fail to de-allocate no.%d block", i);
+        }
+    }
+
+    lm_fini();
+
+    fprintf(stderr, "%s\n", fail ? "fail" : "succ");
+    return !fail;
 }
 
 int
 main(int argc, char** argv) {
-    return test_page_alloc() && test_mode() ? 0 : 1;
+    bool result = test_page_alloc() &&
+                  test_lazy_init() &&
+                  test_mode();
+
+    return result ? 0 : 1;
 }

@@ -421,7 +421,7 @@ lm_munmap(void* addr, size_t length) {
  */
 void*
 lm_mmap(void *addr, size_t length, int prot, int flags,
-         int fd, off_t offset) {
+        int fd, off_t offset) {
 
     if (addr /* we completely ignore hint */ ||
         fd != -1 /* Only support anonymous mapp */ ||
@@ -439,8 +439,17 @@ lm_mmap(void *addr, size_t length, int prot, int flags,
             return p;
     }
 
+    /* deal with user-mode/prefer-user-mode */
     p = lm_malloc(length);
-    return p ? p : MAP_FAILED;
+    if (p != MAP_FAILED)
+        return p;
+
+    if (ljmm_mode != LM_USER_MODE) {
+        ASSERT(ljmm_mode == LM_PREFER_USER);
+        return mmap(addr, length, prot, flags, fd, offset);
+    }
+
+    return  MAP_FAILED;
 }
 
 /*****************************************************************************
@@ -506,5 +515,7 @@ lm_init2(ljmm_opt_t* opt) {
 
 int
 lm_init(void) {
-    return lm_init2(NULL);
+    ljmm_opt_t opt;
+    lm_init_mm_opt(&opt);
+    return lm_init2(&opt);
 }
