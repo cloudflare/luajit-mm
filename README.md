@@ -1,5 +1,7 @@
 luajit-mm
 =========
+*NB: this repo has been deprecated since native 2GB address space already supported in the LuaJIT > v2.1-20161104.*
+
 
 Luajit take full advantage of lower 2G memory on AMD64 platform.
 
